@@ -1,8 +1,5 @@
 package com.wkonda.cubesuite.mvave
 
-enum class Preset(value: Int) {
-    A(0), B(1), C(2)
-}
 data class Settings(
     val general: Module.General, val cab: Module.CAB, val mod: Module.MOD, val amp: Module.AMP
 ) {

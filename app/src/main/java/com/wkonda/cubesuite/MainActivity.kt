@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.wkonda.cubesuite.mvave.CubeBaby
+import com.wkonda.cubesuite.mvave.Preset
 import com.wkonda.cubesuite.mvave.Setting
 import com.wkonda.cubesuite.mvave.Settings
 import com.wkonda.cubesuite.ui.SettingsScreen
@@ -32,7 +33,8 @@ class MainActivity : ComponentActivity() {
         CubeBaby(h)
     }
     val actionFlow = MutableSharedFlow<Pair<Setting, Byte>>(extraBufferCapacity = 1)
-    private var settings by mutableStateOf<Settings?>(null)
+    private var allSettings by mutableStateOf<List<Settings>?>(null)
+    private var activePreset by mutableStateOf(Preset.A)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,11 +44,17 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = AppDarkBackground
                 ) {
-                    settings?.let { current ->
+                    allSettings?.let { presets ->
                         SettingsScreen(
-                            settings = current, onAction = { type, newValue ->
+                            presets = presets,
+                            activePreset = activePreset,
+                            onPresetSelected = { activePreset = it },
+                            onAction = { type, newValue ->
                                 actionFlow.tryEmit(type to newValue)
-                                settings = current.update(type, newValue)
+                                allSettings = presets.toMutableList().apply {
+                                    this[activePreset.index] =
+                                        this[activePreset.index].update(type, newValue)
+                                }
                             })
                     }
                 }
@@ -59,10 +67,10 @@ class MainActivity : ComponentActivity() {
 
             val s = cube.getCurrentSettings()
             withContext(Dispatchers.Main) {
-                settings = s
+                allSettings = s
             }
             @OptIn(FlowPreview::class) actionFlow.debounce(250).collect {
-                cube.send(it.first, it.second)
+                cube.send(activePreset, it.first, it.second)
             }
         }
     }
