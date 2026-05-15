@@ -18,9 +18,9 @@ class CubeBaby(private val connexionHandler: UsbConnectionHandler) {
     }
 
     private fun parseSettings(buffer: ByteArray): Settings? {
-        if (buffer.size < 70) return null
-        val values = MidiEncoder.parseSevenBitValues(buffer.copyOfRange(17, 32))
-        val settings = values.copyOf(13)
+        val values = MidiEncoder.parseSevenBitValues(buffer.copyOfRange(17, buffer.size - 3))
+        val preset = 1
+        val settings = values.copyOfRange(preset * 16, (preset + 1) * 16)
         return Settings.parseFromValues(settings)
     }
 

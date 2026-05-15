@@ -1,14 +1,24 @@
 package com.wkonda.cubesuite.mvave
 
+enum class Preset(value: Int) {
+    A(0), B(1), C(2)
+}
 data class Settings(
     val general: Module.General, val cab: Module.CAB, val mod: Module.MOD, val amp: Module.AMP
 ) {
     companion object {
+        private fun ByteArray.v(s: Setting) = this[s.code.toInt()]
+
         fun parseFromValues(b: ByteArray) = Settings(
-            general = Module.General(b[5], b[12], b[10], b[11]),
-            cab = Module.CAB(b[9], b[3]),
-            mod = Module.MOD(b[7], b[4], b[6], b[8]),
-            amp = Module.AMP(b[2], b[1], b[0])
+            general = Module.General(
+                b.v(Setting.VOLUME), b.v(Setting.AMP_SW), b.v(Setting.CAB_SW), b.v(Setting.MOD_SW)
+            ), cab = Module.CAB(
+                b.v(Setting.IR), b.v(Setting.REVERB)
+            ), mod = Module.MOD(
+                b.v(Setting.MIX), b.v(Setting.FB), b.v(Setting.TIME), b.v(Setting.MOD)
+            ), amp = Module.AMP(
+                b.v(Setting.TONE), b.v(Setting.GAIN), b.v(Setting.TYPE)
+            )
         )
     }
 
