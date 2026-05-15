@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
         CubeBaby(h)
     }
     val actionFlow = MutableSharedFlow<Pair<Setting, Byte>>(extraBufferCapacity = 1)
-    private var allSettings by mutableStateOf<List<Settings>?>(null)
+    private var allSettings by mutableStateOf<Map<Preset, Settings>?>(null)
     private var activePreset by mutableStateOf(Preset.A)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,15 +46,22 @@ class MainActivity : ComponentActivity() {
                 ) {
                     allSettings?.let { presets ->
                         SettingsScreen(
-                            presets = presets,
                             activePreset = activePreset,
+                            settings = presets[activePreset]!!,
                             onPresetSelected = { activePreset = it },
+                            onSave = {
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    cube.save(presets)
+                                }
+                            },
                             onAction = { type, newValue ->
                                 actionFlow.tryEmit(type to newValue)
-                                allSettings = presets.toMutableList().apply {
-                                    this[activePreset.index] =
-                                        this[activePreset.index].update(type, newValue)
-                                }
+                                allSettings = allSettings?.plus(
+                                    activePreset to allSettings!![activePreset]!!.update(
+                                        type,
+                                        newValue
+                                    )
+                                )
                             })
                     }
                 }

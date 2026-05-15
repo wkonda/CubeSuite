@@ -9,7 +9,7 @@ class CubeBaby(private val connexionHandler: UsbConnectionHandler) {
         private val getSettingsCommand = "F000320D410000400200000000000600004A01F7".hexToByteArray()
     }
 
-    suspend fun getCurrentSettings(): List<Settings>? {
+    suspend fun getCurrentSettings(): Map<Preset, Settings>? {
         val sent = connexionHandler.send(getSettingsCommand)
         if (!sent) return null
 
@@ -17,10 +17,10 @@ class CubeBaby(private val connexionHandler: UsbConnectionHandler) {
         return parseSettings(received)
     }
 
-    private fun parseSettings(buffer: ByteArray): List<Settings>? {
+    private fun parseSettings(buffer: ByteArray): Map<Preset, Settings>? {
         if (buffer.size < 74) return null
         val values = MidiEncoder.parseSevenBitValues(buffer.copyOfRange(17, buffer.size - 2))
-        return Preset.entries.map { preset ->
+        return Preset.entries.associateWith { preset ->
             Settings.parseFromValues(values.copyOfRange(preset.index * 16, (preset.index + 1) * 16))
         }
     }
@@ -50,5 +50,11 @@ class CubeBaby(private val connexionHandler: UsbConnectionHandler) {
             (totalCs % 128).toByte(), (totalCs / 128).toByte(),//
             0xF7.toByte()
         )
+    }
+
+    suspend fun save(presets: Map<Preset, Settings>) {
+        val values = presets.map {
+
+        }
     }
 }
