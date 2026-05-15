@@ -78,24 +78,36 @@ object MidiEncoder {
     }
 
     fun parseSevenBitValues(buffer: ByteArray): ByteArray {
-        val p = buffer.map { it.toInt() and 0xFF }
-        val result = mutableListOf<Byte>()
-
-        var i = 0
-        while (true) {
+        val resultSize = (buffer.size * 7) / 8
+        val result = ByteArray(resultSize)
+        for (i in 0 until resultSize) {
             val m = i % 7
             val idx = i + i / 7
+            if (idx + 1 >= buffer.size) break
 
-            if (idx + 1 >= p.size) break
-
-            val value =
-                ((p[idx] shr m) or
-                        ((p[idx + 1] and ((1 shl (m + 1)) - 1)) shl (7 - m))) and 0x7F
-
-            result.add(value.toByte())
-            i++
+            val b0 = buffer[idx].toInt()
+            val b1 = buffer[idx + 1].toInt()
+            result[i] = (((b0 shr m) or (b1 shl (7 - m))) and 0x7F).toByte()
         }
+        return result
+    }
 
-        return result.toByteArray()
+    fun fromSevenBitsValues(buffer: ByteArray): ByteArray {
+        val resultSize = (buffer.size * 8 + 6) / 7
+        val result = ByteArray(resultSize)
+        for (i in 0 until resultSize) {
+            val m = i % 8
+            val idx = i - i / 8
+            val bPrev = if (idx > 0) buffer[idx - 1].toInt() and 0xFF else 0
+            val bCurr = if (idx < buffer.size) buffer[idx].toInt() and 0xFF else 0
+
+            val value = when (m) {
+                0 -> bCurr and 0x7F
+                7 -> (bPrev shr 1) and 0x7F
+                else -> ((bPrev shr (8 - m)) or (bCurr shl m)) and 0x7F
+            }
+            result[i] = value.toByte()
+        }
+        return result
     }
 }

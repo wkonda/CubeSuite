@@ -1,5 +1,6 @@
 package com.wkonda.cubesuite.usb
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -12,16 +13,21 @@ class UsbConnectionHandler(
     private val manager: UsbManager
 ) {
     companion object {
-        private const val USB_SUBCLASS_MIDISTREAMING = 3
+        private const val USB_SUBCLASS_MIDI_STREAMING = 3
+        private const val CUBE_BABY_VID = 12314
+        private const val CUBE_BABY_PID = 21845
     }
 
     private val itf = DeviceInterface()
     private var connection: UsbDeviceConnection? = null
 
     suspend fun findAndOpen(context: Context): Boolean {
-        val device = manager.deviceList.values.firstOrNull() ?: return false
+        val device = manager.deviceList.values.find {
+            it.vendorId == CUBE_BABY_VID && it.productId == CUBE_BABY_PID
+        } ?: return false
 
         if (!manager.hasPermission(device)) {
+            @SuppressLint("MutableImplicitPendingIntent")
             val permissionIntent = PendingIntent.getBroadcast(
                 context,
                 84455,
@@ -34,7 +40,7 @@ class UsbConnectionHandler(
 
         for (i in 0 until device.interfaceCount) {
             val iface = device.getInterface(i)
-            if (iface.interfaceClass == UsbConstants.USB_CLASS_AUDIO && iface.interfaceSubclass == USB_SUBCLASS_MIDISTREAMING) {
+            if (iface.interfaceClass == UsbConstants.USB_CLASS_AUDIO && iface.interfaceSubclass == USB_SUBCLASS_MIDI_STREAMING) {
                 itf.usbInterface = iface
                 for (j in 0 until iface.endpointCount) {
                     val ep = iface.getEndpoint(j)
@@ -68,7 +74,7 @@ class UsbConnectionHandler(
     suspend fun send(sysExMessage: ByteArray): Boolean {
         val message = MidiEncoder.sysExToUsb(sysExMessage)
         val transferred = connection?.bulkTransfer(itf.outEndpoint, message, message.size, 10) ?: -1
-        return transferred >= 0
+        return transferred == message.size
     }
 
     suspend fun receive(): ByteArray? {

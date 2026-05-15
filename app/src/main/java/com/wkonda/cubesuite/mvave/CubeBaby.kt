@@ -52,9 +52,23 @@ class CubeBaby(private val connexionHandler: UsbConnectionHandler) {
         )
     }
 
-    suspend fun save(presets: Map<Preset, Settings>) {
-        val values = presets.map {
+    suspend fun save(presets: Map<Preset, Settings>): Boolean {
+        val values: ByteArray = presets.values.flatMap { settings ->
+            settings.toBytes().toList()
+        }.toByteArray()
+        val data = MidiEncoder.fromSevenBitsValues(values)
+        val totalCs = 0//f(data)
+        val m = byteArrayOf(
+            0xF0.toByte(), 0, 32, 9, 41, 3, 0, 40, 2, 0, 0, 0, 0, 0, 6, 0, 0, 0
+        ) + data + byteArrayOf(
+            (totalCs % 128).toByte(), (totalCs / 128).toByte(),//
+            0xF7.toByte()
+        )
 
-        }
+        val sent = connexionHandler.send(m)
+        if (!sent) return false
+
+        connexionHandler.receive() ?: return false
+        return true
     }
 }

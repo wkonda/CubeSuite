@@ -19,6 +19,26 @@ data class Settings(
         )
     }
 
+    fun toBytes() = ByteArray(16).apply {
+        Setting.entries.forEach { s ->
+            this[s.code.toInt()] = when (s) {
+                Setting.TYPE -> amp.type
+                Setting.GAIN -> amp.gain
+                Setting.TONE -> amp.tone
+                Setting.REVERB -> cab.reverb
+                Setting.FB -> mod.fb
+                Setting.VOLUME -> general.volume
+                Setting.TIME -> mod.time
+                Setting.MIX -> mod.mix
+                Setting.MOD -> mod.mod
+                Setting.IR -> cab.ir
+                Setting.CAB_SW -> general.cabSw
+                Setting.MOD_SW -> general.modSw
+                Setting.AMP_SW -> general.ampSw
+            }
+        }
+    }
+
     fun update(setting: Setting, value: Byte): Settings {
         return when (setting) {
             Setting.VOLUME -> copy(general = general.copy(volume = value))
