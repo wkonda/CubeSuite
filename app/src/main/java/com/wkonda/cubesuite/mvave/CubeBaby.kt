@@ -57,23 +57,13 @@ class CubeBaby(private val connexionHandler: UsbConnectionHandler) {
             settings.toBytes().toList()
         }.toByteArray()
         val payload = byteArrayOf(
-            0x05/*mem_type*/,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x30 /*mem_len*/,
-            0x00,
-            0x00
+            0x05,//mem_type
+            0x00, 0x00, 0x00, 0x00,//addr
+            0x30, 0x00, 0x00//mem_len
         ) + values
         val checksum = (payload.sum().inv()) and 0xFF
         val full8BitMessage = byteArrayOf(
-            0x00,
-            0x59,
-            0x22,
-            0x38,
-            0x00,
-            0x00
+            0x00, 0x59, 0x22, 0x38, 0x00, 0x00//header
         ) + payload + byteArrayOf(checksum.toByte())
         val message =
             byteArrayOf(0xF0.toByte()) + MidiEncoder.fromSevenBitsValues(full8BitMessage) + byteArrayOf(
