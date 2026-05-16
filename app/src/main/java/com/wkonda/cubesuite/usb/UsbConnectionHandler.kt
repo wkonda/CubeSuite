@@ -8,6 +8,7 @@ import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import com.wkonda.cubesuite.midi.MidiEncoder
+import kotlin.math.min
 
 class UsbConnectionHandler(
     private val manager: UsbManager
@@ -73,8 +74,17 @@ class UsbConnectionHandler(
 
     suspend fun send(sysExMessage: ByteArray): Boolean {
         val message = MidiEncoder.sysExToUsb(sysExMessage)
-        val transferred = connection?.bulkTransfer(itf.outEndpoint, message, message.size, 10) ?: -1
-        return transferred == message.size
+
+        var offset = 0
+        while (offset < message.size) {
+            val length = min(message.size - offset, itf.outEndpoint?.maxPacketSize ?: 0)
+            val transferred =
+                connection?.bulkTransfer(itf.outEndpoint, message, offset, length, 10) ?: -1
+            if (transferred < 0) return false
+            offset += transferred
+        }
+
+        return true
     }
 
     suspend fun receive(): ByteArray? {

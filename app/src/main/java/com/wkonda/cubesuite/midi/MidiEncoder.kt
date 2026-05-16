@@ -78,7 +78,7 @@ object MidiEncoder {
     }
 
     fun parseSevenBitValues(buffer: ByteArray): ByteArray {
-        val resultSize = (buffer.size * 7) / 8
+        val resultSize = (buffer.size * 7 + 7) / 8
         val result = ByteArray(resultSize)
         for (i in 0 until resultSize) {
             val m = i % 7
@@ -93,7 +93,7 @@ object MidiEncoder {
     }
 
     fun fromSevenBitsValues(buffer: ByteArray): ByteArray {
-        val resultSize = (buffer.size * 8 + 6) / 7
+        val resultSize = (buffer.size * 8) / 7
         val result = ByteArray(resultSize)
         for (i in 0 until resultSize) {
             val m = i % 8

@@ -44,14 +44,15 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = AppDarkBackground
                 ) {
-                    allSettings?.let { presets ->
+                    allSettings ?: return@Surface
+
                         SettingsScreen(
                             activePreset = activePreset,
-                            settings = presets[activePreset]!!,
+                            settings = allSettings!![activePreset]!!,
                             onPresetSelected = { activePreset = it },
                             onSave = {
                                 lifecycleScope.launch(Dispatchers.IO) {
-                                    cube.save(presets)
+                                    cube.save(allSettings!!)
                                 }
                             },
                             onAction = { type, newValue ->
@@ -63,7 +64,6 @@ class MainActivity : ComponentActivity() {
                                     )
                                 )
                             })
-                    }
                 }
             }
         }
