@@ -33,4 +33,46 @@ class MidiEncoderTest {
             "0059 23 08 0000 05 00000000 30 0000 4A".replace(" ", "").hexToByteArray()
         assertArrayEquals(expectedValues, values)
     }
+
+    @Test
+    fun encodeGainToFive() {
+        val encoded =
+            MidiEncoder.fromSevenBitsValues("005922090000050100000001000005F3".hexToByteArray())
+        val expected = "00320949000040020100000010000000056603".hexToByteArray()
+        assertArrayEquals(expected, encoded)
+    }
+
+    @Test
+    fun decodeSetSettingCommand() {
+        val setGainCommand = "00320949000040020100000018000000056605".hexToByteArray()
+        val values = MidiEncoder.parseSevenBitValues(setGainCommand)
+        val expectedValues =
+            "0059 22 09 0000 05 0100 000001 0000 05 73".replace(" ", "").hexToByteArray()
+        assertArrayEquals(expectedValues, values)
+    }
+
+    @Test
+    fun decodeSetSettingCommand2() {
+        val setGainCommand = "00320949000040022700000018000000041c05".hexToByteArray()
+        val values = MidiEncoder.parseSevenBitValues(setGainCommand)
+        val expectedValues =
+            "00 59 22 09 0000 05 27 000000 01 0000 04 4E".replace(" ", "").hexToByteArray()
+        assertArrayEquals(expectedValues, values)
+    }
+
+    @Test
+    fun decodeRealGainToFiveCommand() {
+        val realCommand =
+            "04f000320409490004004002040100000400180004000005076601f7".hexToByteArray()
+        val sysExCommand = MidiEncoder.usbToSysEx(realCommand)
+        val commandData = sysExCommand.copyOfRange(1, sysExCommand.size - 1)
+        val expectedCommandData =
+            byteArrayOf(0, 50, 9, 73, 0, 0, 64, 2, 1, 0, 0, 0, 24, 0, 0, 0, 5, 102, 1)
+        assertArrayEquals(expectedCommandData, commandData)
+
+        val decodedMessage = MidiEncoder.parseSevenBitValues(commandData)
+        val expectedDecoded =
+            "0059 22 09 0000 05 01 0000 00 01 0000 05 73".replace(" ", "").hexToByteArray()
+        assertArrayEquals(expectedDecoded, decodedMessage)
+    }
 }

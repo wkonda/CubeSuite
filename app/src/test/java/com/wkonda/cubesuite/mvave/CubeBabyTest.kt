@@ -1,6 +1,7 @@
 package com.wkonda.cubesuite.mvave
 
 import android.content.Context
+import com.wkonda.cubesuite.midi.MidiEncoder
 import com.wkonda.cubesuite.usb.UsbConnection
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
@@ -59,7 +60,7 @@ class CubeBabyTest {
 
         assertNotNull(fake.lastSent)
         val msg = fake.lastSent!!
-        val expected = "F000320949000040021100000018000000074205F7".hexToByteArray()
+        val expected = "F000320949000040021100000018000000074201F7".hexToByteArray()
         assertArrayEquals(expected, msg)
     }
 
@@ -72,7 +73,7 @@ class CubeBabyTest {
 
         assertNotNull(fake.lastSent)
         val msg = fake.lastSent!!
-        val expected = "F000320949000040020A00000018000000015C05F7".hexToByteArray()
+        val expected = "F000320949000040020A00000018000000015C01F7".hexToByteArray()
         assertArrayEquals(expected, msg)
     }
 
@@ -135,5 +136,36 @@ class CubeBabyTest {
         cubeBaby.getCurrentSettings()
         val expectedToSend = "F000320D410000400200000000000600004A01F7".hexToByteArray()
         assertArrayEquals(expectedToSend, fake.lastSent)
+    }
+
+    @Test
+    fun setSettingCommand() = runBlocking {
+        val fake = FakeUsbConnection()
+        val cubeBaby = CubeBaby(fake)
+        cubeBaby.send(Preset.A, Setting.GAIN, 5)
+        val expectedToSend = "F000320949000040020100000018000000056601F7".hexToByteArray()
+        assertArrayEquals(expectedToSend, fake.lastSent)
+    }
+
+    @Test
+    fun setSettingCommand2() = runBlocking {
+        val fake = FakeUsbConnection()
+        val cubeBaby = CubeBaby(fake)
+        cubeBaby.send(Preset.C, Setting.MIX, 4)
+        val expectedToSend = "f000320949000040022700000018000000041c01f7".hexToByteArray()
+        assertArrayEquals(expectedToSend, fake.lastSent)
+    }
+
+    @Test
+    fun decodeRealGainToFiveCommand() = runBlocking {
+        val fake = FakeUsbConnection()
+        val cubeBaby = CubeBaby(fake)
+        cubeBaby.send(Preset.A, Setting.GAIN, 5)
+
+        val realCommand =
+            "04f000320409490004004002040100000400180004000005076601f7".hexToByteArray()
+        val expected = MidiEncoder.usbToSysEx(realCommand)
+
+        assertArrayEquals(expected, fake.lastSent)
     }
 }
