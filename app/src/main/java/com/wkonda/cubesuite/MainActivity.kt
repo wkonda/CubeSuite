@@ -22,6 +22,7 @@ import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
 import com.wkonda.cubesuite.usb.UsbConnectionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
     val actionFlow = MutableSharedFlow<Pair<Setting, Byte>>(extraBufferCapacity = 1)
     private var allSettings by mutableStateOf<Map<Preset, Settings>?>(null)
     private var activePreset by mutableStateOf(Preset.A)
+    private var isSuccess by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,10 +51,21 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             activePreset = activePreset,
                             settings = allSettings!![activePreset]!!,
+                            isSuccess = isSuccess,
                             onPresetSelected = { activePreset = it },
                             onSave = {
+                                isSuccess = null
                                 lifecycleScope.launch(Dispatchers.IO) {
-                                    cube.save(allSettings!!)
+                                    val success = cube.save(allSettings!!)
+                                    withContext(Dispatchers.Main) {
+                                        if (success) {
+                                            isSuccess = true
+                                            delay(2000)
+                                            isSuccess = null
+                                        } else {
+                                            isSuccess = false
+                                        }
+                                    }
                                 }
                             },
                             onAction = { type, newValue ->

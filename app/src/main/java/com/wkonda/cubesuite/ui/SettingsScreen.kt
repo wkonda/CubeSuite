@@ -30,6 +30,7 @@ fun SettingsScreenPreview() {
     SettingsScreen(
         activePreset = Preset.A,
         settings = mockSettings,
+        isSuccess = null,
         onPresetSelected = {},
         onSave = {},
         onAction = { _, _ -> })
@@ -39,6 +40,7 @@ fun SettingsScreenPreview() {
 fun SettingsScreen(
     activePreset: Preset,
     settings: Settings,
+    isSuccess: Boolean?,
     onPresetSelected: (Preset) -> Unit,
     onSave: () -> Unit,
     onAction: (Setting, Byte) -> Unit
@@ -86,6 +88,6 @@ fun SettingsScreen(
             SettingsRow("TYPE", settings.amp.type, Setting.TYPE, ampOn, onAction)
         }
 
-        SaveButton { onSave() }
+        SaveButton(isSuccess) { onSave() }
     }
 }
