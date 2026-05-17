@@ -39,7 +39,7 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
 
     suspend fun save(presets: Map<Preset, Settings>): Boolean {
         val values = presets.values.flatMap { it.toBytes().toList() }.toByteArray()
-        val message = buildCommand(Command.DumpSettings, Direction.HostToPedal, 5, 0, data = values)
+        val message = buildCommand(Command.SaveSettings, Direction.HostToPedal, 5, data = values)
         return sendAndReceive(message) != null
     }
 
@@ -48,7 +48,7 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
     }
 
     enum class Command(val code: Byte) {
-        ChangeRamSetting(0x09), GetSettings(0x08), DumpSettings(0x38), RequestNameVersion(0x03),
+        ChangeRamSetting(0x09), GetSettings(0x08), SaveSettings(0x38), RequestNameVersion(0x03),
     }
 
     private fun buildCommand(

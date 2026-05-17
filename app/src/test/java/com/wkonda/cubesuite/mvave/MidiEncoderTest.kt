@@ -75,4 +75,22 @@ class MidiEncoderTest {
             "0059 22 09 0000 05 01 0000 00 01 0000 05 73".replace(" ", "").hexToByteArray()
         assertArrayEquals(expectedDecoded, decodedMessage)
     }
+
+    @Test
+    fun saveCommand() {
+        val realCommandL1 =
+            "04f000320409410304004002040000000400000604000000040000100400601f04000000040008000400000004000010041070000440182a04124c3804000040"
+        val realCommandL2 =
+            "04000100040000400440400304000028040100000400000004000400040000400641f700"
+        val sysExCommand = MidiEncoder.usbToSysEx((realCommandL1 + realCommandL2).hexToByteArray())
+        val commandData = sysExCommand.copyOfRange(1, sysExCommand.size - 1)
+
+        val decodedMessage = MidiEncoder.parseSevenBitValues(commandData)
+        val expectedDecoded = ("0059 22 38 0000 05 00 0000 00 30 0000" +//
+                "00000002007f00000000010000000000" +//
+                "04020700312a09130700000101000000" +//
+                "04020700002a00000000000001000000" +//
+                "03").replace(" ", "").hexToByteArray()
+        assertArrayEquals(expectedDecoded, decodedMessage)
+    }
 }
