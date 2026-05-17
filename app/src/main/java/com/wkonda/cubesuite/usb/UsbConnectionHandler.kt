@@ -12,7 +12,7 @@ import kotlin.math.min
 
 class UsbConnectionHandler(
     private val manager: UsbManager
-) {
+) : UsbConnection {
     companion object {
         private const val USB_SUBCLASS_MIDI_STREAMING = 3
         private const val CUBE_BABY_VID = 12314
@@ -22,7 +22,7 @@ class UsbConnectionHandler(
     private val itf = DeviceInterface()
     private var connection: UsbDeviceConnection? = null
 
-    suspend fun findAndOpen(context: Context): Boolean {
+    override suspend fun findAndOpen(context: Context): Boolean {
         val device = manager.deviceList.values.find {
             it.vendorId == CUBE_BABY_VID && it.productId == CUBE_BABY_PID
         } ?: return false
@@ -66,13 +66,13 @@ class UsbConnectionHandler(
     }
 
 
-    fun close() {
+    override fun close() {
         connection?.releaseInterface(itf.usbInterface)
         connection?.close()
         connection = null
     }
 
-    suspend fun send(sysExMessage: ByteArray): Boolean {
+    override suspend fun send(sysExMessage: ByteArray): Boolean {
         val message = MidiEncoder.sysExToUsb(sysExMessage)
 
         var offset = 0
@@ -87,7 +87,7 @@ class UsbConnectionHandler(
         return true
     }
 
-    suspend fun receive(): ByteArray? {
+    override suspend fun receive(): ByteArray? {
         val buffer = ByteArray(128)
         val receivedBytes = connection?.bulkTransfer(itf.inEndpoint, buffer, buffer.size, 100) ?: 0
         if (receivedBytes <= 0) return null
