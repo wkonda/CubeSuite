@@ -5,16 +5,20 @@ import com.wkonda.cubesuite.midi.MidiEncoder
 import com.wkonda.cubesuite.usb.UsbConnection
 
 class CubeBaby(private val connexionHandler: UsbConnection) {
+    suspend fun findAndOpen(context: Context) = connexionHandler.findAndOpen(context)
+
     companion object {
         private val GET_SETTINGS_COMMAND =
             "F000320D410000400200000000000600004A01F7".hexToByteArray()
-        private val SAVE_HEADER = byteArrayOf(0x00, 0x59, 0x22, 0x38, 0x00, 0x00)
     }
-
-    suspend fun findAndOpen(context: Context) = connexionHandler.findAndOpen(context)
-
     suspend fun getCurrentSettings(): Map<Preset, Settings>? {
         return sendAndReceive(GET_SETTINGS_COMMAND)?.let(::parseSettings)
+    }
+
+    suspend fun getCurrentSettingsNew(): Map<Preset, Settings>? {
+        val request =
+            buildCommand(Command.GetSettings, Direction.PedalToHost, 5, len = 0x30) + byteArrayOf(0)
+        return sendAndReceive(request)?.let(::parseSettings)
     }
 
     private fun parseSettings(buffer: ByteArray): Map<Preset, Settings>? {
@@ -43,13 +47,33 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
 
     suspend fun save(presets: Map<Preset, Settings>): Boolean {
         val values = presets.values.flatMap { it.toBytes().toList() }.toByteArray()
-        val payload = byteArrayOf(0x05, 0, 0, 0, 0, values.size.toByte(), 0, 0) + values
-        val checksum = (payload.sum().inv() and 0xFF).toByte()
-        val fullMsg = SAVE_HEADER + payload + byteArrayOf(checksum)
-        val message =
-            byteArrayOf(0xF0.toByte()) + MidiEncoder.fromSevenBitsValues(fullMsg) + byteArrayOf(0xF7.toByte())
-
+        val message = buildCommand(Command.DumpSettings, Direction.HostToPedal, 5, values)
         return sendAndReceive(message) != null
+    }
+
+    enum class Direction(val code: Byte) {
+        HostToPedal(0x22), PedalToHost(0x23)
+    }
+
+    enum class Command(val code: Byte) {
+        ChangeRamSetting(0x09), GetSettings(0x08), DumpSettings(0x38), RequestNameVersion(0x03),
+    }
+
+    private fun buildCommand(
+        command: Command,
+        direction: Direction,
+        address: Byte,
+        data: ByteArray = ByteArray(0),
+        len: Int = data.size,
+    ): ByteArray {
+        val payload = byteArrayOf(address, 0, 0, 0, 0, len.toByte(), 0, 0) + data
+        val checksum = (payload.sum().inv()).toByte()
+        val fullMsg = byteArrayOf(
+            0x00, 0x59, direction.code, command.code, 0x00, 0x00
+        ) + payload + byteArrayOf(checksum)
+        return byteArrayOf(0xF0.toByte()) + MidiEncoder.fromSevenBitsValues(fullMsg) + byteArrayOf(
+            0xF7.toByte()
+        )
     }
 
     private suspend fun sendAndReceive(message: ByteArray): ByteArray? {

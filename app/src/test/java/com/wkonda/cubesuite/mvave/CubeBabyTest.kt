@@ -64,6 +64,19 @@ class CubeBabyTest {
     }
 
     @Test
+    fun sendSettingACabSwOn() = runBlocking {
+        val fake = FakeUsbConnection()
+        val cubeBaby = CubeBaby(fake)
+
+        cubeBaby.send(Preset.A, Setting.CAB_SW, 1)
+
+        assertNotNull(fake.lastSent)
+        val msg = fake.lastSent!!
+        val expected = "F000320949000040020A00000018000000015C05F7".hexToByteArray()
+        assertArrayEquals(expected, msg)
+    }
+
+    @Test
     fun `save sends correctly formatted message`() = runBlocking {
         val fake = FakeUsbConnection()
         val cubeBaby = CubeBaby(fake)
@@ -113,5 +126,14 @@ class CubeBabyTest {
             "F0003209410300400200000000000600000000001000601F00000000080000000000001010700000012A0844400000400001000000404040030000280100000000000004000000005CF7".hexToByteArray()
 
         assertArrayEquals(expectedMessage, fake.lastSent)
+    }
+
+    @Test
+    fun getSettingsCommand() = runBlocking {
+        val fake = FakeUsbConnection()
+        val cubeBaby = CubeBaby(fake)
+        cubeBaby.getCurrentSettings()
+        val expectedToSend = "F000320D410000400200000000000600004A01F7".hexToByteArray()
+        assertArrayEquals(expectedToSend, fake.lastSent)
     }
 }
