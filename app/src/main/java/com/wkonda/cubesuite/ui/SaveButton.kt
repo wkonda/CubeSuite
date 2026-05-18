@@ -8,10 +8,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -22,32 +20,28 @@ import com.wkonda.cubesuite.ui.theme.CyanAccent
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
 import kotlinx.coroutines.delay
 
+private enum class State { IDLE, SAVING, SAVED }
+
 @Composable
 fun SaveButton(isSuccess: Boolean?, onSave: () -> Unit) {
-    var isSaving by remember { mutableStateOf(value = false) }
-    var localSuccess by remember { mutableStateOf<Boolean?>(null) }
+    val state = remember { mutableStateOf(State.IDLE) }
 
     LaunchedEffect(isSuccess) {
-        if (isSuccess != null) {
-            isSaving = false
-            localSuccess = isSuccess
-            if (isSuccess) {
-                delay(2000)
-                localSuccess = null
-            }
+        if (isSuccess == true) {
+            state.value = State.SAVED
+            delay(2000)
+            state.value = State.IDLE
+        } else if (isSuccess == false) {
+            state.value = State.IDLE
         }
     }
 
     Button(
-        onClick = {
-            isSaving = true
-            localSuccess = null
-            onSave()
-        },
-        enabled = (!isSaving) && (localSuccess == null),
+        onClick = { state.value = State.SAVING; onSave() },
+        enabled = state.value == State.IDLE,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (localSuccess == true) CyanAccent else ModTrackRed,
-            disabledContainerColor = if (localSuccess == true) CyanAccent else ModTrackRed,
+            containerColor = if (state.value == State.SAVED) CyanAccent else ModTrackRed,
+            disabledContainerColor = if (state.value == State.SAVED) CyanAccent else ModTrackRed,
         ),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
@@ -55,9 +49,9 @@ fun SaveButton(isSuccess: Boolean?, onSave: () -> Unit) {
             .widthIn(min = 120.dp)
     ) {
         Text(
-            text = when {
-                isSaving -> "Saving..."
-                localSuccess == true -> "Saved!"
+            text = when (state.value) {
+                State.SAVING -> "Saving..."
+                State.SAVED -> "Saved!"
                 else -> "Save"
             },
             color = Color.White,
