@@ -9,7 +9,7 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
     suspend fun findAndOpen(context: Context) = connexionHandler.findAndOpen(context)
 
     suspend fun getCurrentSettings(): Map<Preset, Settings>? {
-        val request = buildCommand(Command.GetSettings, Direction.PedalToHost, 5, len = 0x30)
+        val request = buildCommand(Command.GetSettings, CommandType.Read, 5, len = 0x30)
         return sendAndReceive(request)?.let(::parseSettings)
     }
 
@@ -28,7 +28,7 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
     suspend fun send(preset: Preset, setting: Setting, value: Byte): Boolean {
         val request = buildCommand(
             Command.ChangeRamSetting,
-            Direction.HostToPedal,
+            CommandType.Write,
             5,
             (preset.index shl 4).toByte() or setting.code,
             0x80.toByte(),
@@ -39,21 +39,21 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
 
     suspend fun save(presets: Map<Preset, Settings>): Boolean {
         val values = presets.values.flatMap { it.toBytes().toList() }.toByteArray()
-        val message = buildCommand(Command.SaveSettings, Direction.HostToPedal, 5, data = values)
+        val message = buildCommand(Command.SaveSettings, CommandType.Write, 5, data = values)
         return sendAndReceive(message) != null
     }
 
-    enum class Direction(val code: Byte) {
-        HostToPedal(0x22), PedalToHost(0x23)
+    enum class CommandType(val code: Byte) {
+        Write(0x22), Read(0x23), RequestNameVersion(0x11)
     }
 
     enum class Command(val code: Byte) {
-        ChangeRamSetting(0x09), GetSettings(0x08), SaveSettings(0x38), RequestNameVersion(0x03),
+        ChangeRamSetting(0x09), GetSettings(0x08), SaveSettings(0x38)
     }
 
     private fun buildCommand(
         command: Command,
-        direction: Direction = Direction.HostToPedal,
+        commandType: CommandType = CommandType.Write,
         address: Byte,
         index: Byte = 0,
         flag: Byte = 0,
@@ -63,8 +63,20 @@ class CubeBaby(private val connexionHandler: UsbConnection) {
         val payload = byteArrayOf(address, index, 0, 0, flag, len.toByte(), 0, 0) + data
         val checksum = payload.sum().inv().toByte()
         val fullMsg = byteArrayOf(
-            0x00, 0x59, direction.code, command.code, 0x00, 0x00
+            0x00, 0x59, commandType.code, command.code, 0x00, 0x00
         ) + payload + byteArrayOf(checksum)
+        return byteArrayOf(0xF0.toByte()) + MidiEncoder.fromSevenBitsValues(fullMsg) + byteArrayOf(
+            0xF7.toByte()
+        )
+    }
+
+    private fun getVersionCommand(): ByteArray {
+        val payload = byteArrayOf(0, 0, 0)
+        val checksum = payload.sum().inv().toByte()
+        val fullMsg =
+            byteArrayOf(0x00, 0x59, CommandType.RequestNameVersion.code) + payload + byteArrayOf(
+                checksum
+            )
         return byteArrayOf(0xF0.toByte()) + MidiEncoder.fromSevenBitsValues(fullMsg) + byteArrayOf(
             0xF7.toByte()
         )

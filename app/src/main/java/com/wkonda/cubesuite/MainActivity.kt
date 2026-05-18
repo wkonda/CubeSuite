@@ -48,35 +48,34 @@ class MainActivity : ComponentActivity() {
                 ) {
                     allSettings ?: return@Surface
 
-                        SettingsScreen(
-                            activePreset = activePreset,
-                            settings = allSettings!![activePreset]!!,
-                            isSuccess = isSuccess,
-                            onPresetSelected = { activePreset = it },
-                            onSave = {
-                                isSuccess = null
-                                lifecycleScope.launch(Dispatchers.IO) {
-                                    val success = cube.save(allSettings!!)
-                                    withContext(Dispatchers.Main) {
-                                        if (success) {
-                                            isSuccess = true
-                                            delay(2000)
-                                            isSuccess = null
-                                        } else {
-                                            isSuccess = false
-                                        }
+                    SettingsScreen(
+                        activePreset = activePreset,
+                        settings = allSettings!![activePreset]!!,
+                        isSuccess = isSuccess,
+                        onPresetSelected = { activePreset = it },
+                        onSave = {
+                            isSuccess = null
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val success = cube.save(allSettings!!)
+                                withContext(Dispatchers.Main) {
+                                    if (success) {
+                                        isSuccess = true
+                                        delay(2000)
+                                        isSuccess = null
+                                    } else {
+                                        isSuccess = false
                                     }
                                 }
-                            },
-                            onAction = { type, newValue ->
-                                actionFlow.tryEmit(type to newValue)
-                                allSettings = allSettings?.plus(
-                                    activePreset to allSettings!![activePreset]!!.update(
-                                        type,
-                                        newValue
-                                    )
+                            }
+                        },
+                        onAction = { type, newValue ->
+                            actionFlow.tryEmit(type to newValue)
+                            allSettings = allSettings?.plus(
+                                activePreset to allSettings!![activePreset]!!.update(
+                                    type, newValue
                                 )
-                            })
+                            )
+                        })
                 }
             }
         }
