@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
             val opened = cube.findAndOpen(this@MainActivity)
             if (!opened) return@launch
 
+            val deviceName = cube.getDeviceName()
             val s = cube.getCurrentSettings()
             withContext(Dispatchers.Main) {
                 allSettings = s
