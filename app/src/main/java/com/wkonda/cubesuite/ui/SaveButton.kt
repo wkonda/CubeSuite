@@ -37,15 +37,25 @@ import com.wkonda.cubesuite.ui.theme.ModTrackRed
 @Composable
 fun SaveButton(isSuccess: Boolean?, onSave: () -> Unit) {
     var isSaving by remember { mutableStateOf(false) }
+    var localSuccess by remember { mutableStateOf<Boolean?>(null) }
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    LaunchedEffect(isSuccess) { if (isSuccess != null) isSaving = false }
+    LaunchedEffect(isSuccess) {
+        if (isSuccess != null) {
+            isSaving = false
+            localSuccess = isSuccess
+            if (isSuccess) {
+                kotlinx.coroutines.delay(2000)
+                localSuccess = null
+            }
+        }
+    }
 
     val scale by animateFloatAsState(
         targetValue = when {
             isSaving -> 0.97f
-            isSuccess == true -> 1.05f
+            localSuccess == true -> 1.05f
             isPressed -> 0.95f
             else -> 1f
         },
@@ -54,7 +64,7 @@ fun SaveButton(isSuccess: Boolean?, onSave: () -> Unit) {
     )
 
     val color by animateColorAsState(
-        targetValue = if (isSuccess == true) CyanAccent else ModTrackRed,
+        targetValue = if (localSuccess == true) CyanAccent else ModTrackRed,
         label = "color"
     )
 
@@ -65,7 +75,7 @@ fun SaveButton(isSuccess: Boolean?, onSave: () -> Unit) {
             .clip(RoundedCornerShape(12.dp))
             .background(color)
             .clickable(
-                enabled = !isSaving,
+                enabled = !isSaving && localSuccess == null,
                 interactionSource = interactionSource,
                 indication = null
             ) {
@@ -79,7 +89,7 @@ fun SaveButton(isSuccess: Boolean?, onSave: () -> Unit) {
         AnimatedContent(
             targetState = when {
                 isSaving -> "Saving..."
-                isSuccess == true -> "Saved!"
+                localSuccess == true -> "Saved!"
                 else -> "Save"
             },
             transitionSpec = { fadeIn() togetherWith fadeOut() },

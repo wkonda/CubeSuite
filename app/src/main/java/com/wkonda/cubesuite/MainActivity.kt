@@ -22,7 +22,6 @@ import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
 import com.wkonda.cubesuite.usb.UsbConnectionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
@@ -58,13 +57,7 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch(Dispatchers.IO) {
                                 val success = cube.save(allSettings!!)
                                 withContext(Dispatchers.Main) {
-                                    if (success) {
-                                        isSuccess = true
-                                        delay(2000)
-                                        isSuccess = null
-                                    } else {
-                                        isSuccess = false
-                                    }
+                                    isSuccess = success
                                 }
                             }
                         },
