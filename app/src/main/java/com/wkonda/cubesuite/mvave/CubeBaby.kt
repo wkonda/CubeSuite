@@ -8,6 +8,8 @@ import kotlin.experimental.or
 class CubeBaby(private val connexionHandler: UsbConnection) {
     suspend fun findAndOpen(context: Context) = connexionHandler.findAndOpen(context)
 
+    fun close() = connexionHandler.close()
+
     suspend fun getCurrentSettings(): Map<Preset, Settings>? {
         val request = buildCommand(CommandType.Read, Command.GetSettings, 5, len = 0x30)
         return sendAndReceive(request)?.let(::parseSettings)
