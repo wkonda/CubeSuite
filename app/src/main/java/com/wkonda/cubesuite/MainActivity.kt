@@ -6,16 +6,13 @@ import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.wkonda.cubesuite.mvave.CubeBaby
@@ -46,27 +43,31 @@ class MainActivity : ComponentActivity() {
     private var activePreset by mutableStateOf(Preset.A)
     private var isSuccess by mutableStateOf<Boolean?>(null)
 
+    private val launcher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { result ->
+            if (result) receiver.start(this) else finish()
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            receiver.start(this) { activePreset }
+        } else {
+            launcher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+
         setContent {
-            val context = LocalContext.current
-            val launcher =
-                rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-                    if (it) receiver.start(context) else finish()
-                }
             DisposableEffect(Unit) {
-                receiver.register(context)
-                onDispose { receiver.unregister(context) }
+                receiver.register(this@MainActivity)
+                onDispose { receiver.unregister(this@MainActivity) }
             }
-            LaunchedEffect(Unit) {
-                if (ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) receiver.start(context, { activePreset })
-                else launcher.launch(Manifest.permission.RECORD_AUDIO)
-            }
+
             CubeSuiteTheme {
                 MainContent(allSettings, activePreset, isSuccess, { activePreset = it }, {
                     isSuccess = null
@@ -89,8 +90,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) receiver.start(
-            this,
-            { activePreset })
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) receiver.start(this) { activePreset }
     }
 }
