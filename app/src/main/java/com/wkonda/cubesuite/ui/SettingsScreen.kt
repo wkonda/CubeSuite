@@ -3,20 +3,15 @@ package com.wkonda.cubesuite.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.wkonda.cubesuite.mvave.Module
 import com.wkonda.cubesuite.mvave.Preset
 import com.wkonda.cubesuite.mvave.Setting
 import com.wkonda.cubesuite.mvave.Settings
-import com.wkonda.cubesuite.ui.theme.ModTrackRed
 
 @Preview
 @Composable
@@ -48,21 +43,9 @@ fun SettingsScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
-            .padding(top = 40.dp),
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            "CUBE SUITE",
-            color = ModTrackRed,
-            fontSize = 48.sp,
-            fontStyle = FontStyle.Italic,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(vertical = 20.dp)
-        )
-
         PresetSelector(activePreset, onPresetSelected)
 
         SettingsRow("VOLUME", settings.general.volume, Setting.VOLUME, onAction = onAction)

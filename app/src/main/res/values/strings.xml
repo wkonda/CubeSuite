@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">CubeSuite</string>
+    <string name="app_name">Cube Suite</string>
+    <string name="no_device_found">Aucun appareil trouvé. Veuillez connecter votre Cube Baby via USB.</string>
 </resources>
