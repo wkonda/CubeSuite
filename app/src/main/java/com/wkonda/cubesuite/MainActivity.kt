@@ -1,16 +1,22 @@
 package com.wkonda.cubesuite
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.wkonda.cubesuite.mvave.CubeBaby
 import com.wkonda.cubesuite.mvave.Preset
@@ -41,6 +47,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { if (it) startUsbConnection() else finish() }
+
+            LaunchedEffect(Unit) {
+                if (ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.RECORD_AUDIO
+                    )
+                    == PackageManager.PERMISSION_GRANTED
+                ) startUsbConnection()
+                else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+
             CubeSuiteTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = AppDarkBackground
@@ -72,7 +92,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
 
+    private fun startUsbConnection() {
         lifecycleScope.launch(Dispatchers.IO) {
             val opened = cube.findAndOpen(this@MainActivity)
             if (!opened) return@launch

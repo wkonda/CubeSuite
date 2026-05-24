@@ -1,9 +1,6 @@
 package com.wkonda.cubesuite.usb
 
-import android.annotation.SuppressLint
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
@@ -27,42 +24,23 @@ class UsbConnectionHandler(
             it.vendorId == CUBE_BABY_VID && it.productId == CUBE_BABY_PID
         } ?: return false
 
-        if (!manager.hasPermission(device)) {
-            @SuppressLint("MutableImplicitPendingIntent")
-            val permissionIntent = PendingIntent.getBroadcast(
-                context,
-                84455,
-                Intent("com.wkonda.cubesuite.USB_PERMISSION"),
-                PendingIntent.FLAG_MUTABLE
-            )
-            manager.requestPermission(device, permissionIntent)
-            return false
-        }
-
         for (i in 0 until device.interfaceCount) {
             val iface = device.getInterface(i)
             if (iface.interfaceClass == UsbConstants.USB_CLASS_AUDIO && iface.interfaceSubclass == USB_SUBCLASS_MIDI_STREAMING) {
                 itf.usbInterface = iface
                 for (j in 0 until iface.endpointCount) {
                     val ep = iface.getEndpoint(j)
-                    if (ep.direction == UsbConstants.USB_DIR_OUT) {
-                        itf.outEndpoint = ep
-                    } else if (ep.direction == UsbConstants.USB_DIR_IN) {
-                        itf.inEndpoint = ep
-                    }
+                    if (ep.direction == UsbConstants.USB_DIR_OUT) itf.outEndpoint = ep
+                    else if (ep.direction == UsbConstants.USB_DIR_IN) itf.inEndpoint = ep
                 }
                 if (itf.isComplete()) break
             }
         }
 
-        if (!itf.isComplete()) {
-            return false
-        }
+        if (!itf.isComplete()) return false
 
         connection = manager.openDevice(device) ?: return false
-        val claimed = connection?.claimInterface(itf.usbInterface, true) ?: false
-
-        return claimed
+        return connection?.claimInterface(itf.usbInterface, true) ?: false
     }
 
 
