@@ -33,10 +33,10 @@ class MainActivity : ComponentActivity() {
     private val actions = MutableSharedFlow<Pair<Setting, Byte>>(extraBufferCapacity = 1)
     private val receiver by lazy {
         UsbReceiver(
-            cube,
-            lifecycleScope,
-            { allSettings = it },
-            actions
+            cube, lifecycleScope, {
+                allSettings = it
+                isSuccess = null
+            }, actions
         )
     }
     private var allSettings by mutableStateOf<Map<Preset, Settings>?>(null)
@@ -79,8 +79,7 @@ class MainActivity : ComponentActivity() {
                     actions.tryEmit(type to value)
                     allSettings = allSettings?.plus(
                         activePreset to allSettings!![activePreset]!!.update(
-                            type,
-                            value
+                            type, value
                         )
                     )
                 }
