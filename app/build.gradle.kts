@@ -15,8 +15,8 @@ android {
         applicationId = "com.wkonda.cubesuite"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionName = "01.00"
+        versionCode = versionName?.replace(".", "")?.toInt()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

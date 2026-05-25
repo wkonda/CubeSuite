@@ -24,7 +24,9 @@ import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
 import com.wkonda.cubesuite.usb.UsbConnectionHandler
 import com.wkonda.cubesuite.usb.UsbReceiver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -32,12 +34,10 @@ class MainActivity : ComponentActivity() {
     private val cube by lazy { CubeBaby(UsbConnectionHandler(getSystemService(USB_SERVICE) as UsbManager)) }
     private val actions = MutableSharedFlow<Pair<Setting, Byte>>(extraBufferCapacity = 1)
     private val receiver by lazy {
-        UsbReceiver(
-            cube, lifecycleScope, {
-                allSettings = it
-                isSuccess = null
-            }, actions
-        )
+        UsbReceiver(cube, lifecycleScope) {
+            allSettings = it
+            isSuccess = null
+        }
     }
     private var allSettings by mutableStateOf<Map<Preset, Settings>?>(null)
     private var activePreset by mutableStateOf(Preset.A)
@@ -53,11 +53,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
+                this, Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            receiver.start(this) { activePreset }
+            receiver.start(this)
+            lifecycleScope.launch(Dispatchers.IO) {
+                @OptIn(FlowPreview::class) actions.debounce(250)
+                    .collect { cube.send(activePreset, it.first, it.second) }
+            }
         } else {
             launcher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -89,6 +92,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) receiver.start(this) { activePreset }
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) receiver.start(this)
     }
 }
