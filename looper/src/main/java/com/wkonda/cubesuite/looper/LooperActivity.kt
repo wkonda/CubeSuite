@@ -4,15 +4,20 @@ import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,14 +31,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.wkonda.cubesuite.looper.audio.AudioAnalyzer
@@ -47,6 +57,7 @@ import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
+import com.wkonda.cubesuite.ui.theme.TextGrayBox
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -79,14 +90,25 @@ class LooperActivity : ComponentActivity() {
                             loops = repository.getAllLoops()
                         }
 
-                        Column {
-                            Button(
-                                onClick = { currentScreen = "looper" },
-                                modifier = Modifier.padding(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
+                        Column(modifier = Modifier
+                            .fillMaxSize()
+                            .background(AppDarkBackground)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Back to Looper", color = Color.Black)
+                                Text("LIBRARY", color = CyanAccent, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "CLOSE",
+                                    color = Color.Gray,
+                                    modifier = Modifier.clickable { currentScreen = "looper" },
+                                    style = MaterialTheme.typography.labelLarge
+                                )
                             }
+
                             LoopListScreen(
                                 loops = loops,
                                 onLoopSelected = { loop ->
@@ -126,8 +148,8 @@ fun LooperScreen(
     val playbackPosition by engine.playbackPosition.collectAsState()
     var isRecording by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
-    var startSample by remember { mutableStateOf(0) }
-    var endSample by remember { mutableStateOf(0) }
+    var startSample by remember { mutableIntStateOf(0) }
+    var endSample by remember { mutableIntStateOf(0) }
     var detectedBpm by remember { mutableDoubleStateOf(0.0) }
     var spectrogramData by remember { mutableStateOf(emptyList<List<Double>>()) }
     var showSpectrogram by remember { mutableStateOf(false) }
@@ -152,35 +174,55 @@ fun LooperScreen(
         }
     }
 
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppDarkBackground)
+            .padding(8.dp)
+    ) {
+        // --- Header ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text("LOOPER", style = MaterialTheme.typography.headlineLarge, color = ModTrackRed)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "CUBE LOOPER",
+                    color = CyanAccent,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
                 if (detectedBpm > 0) {
                     Text(
-                        "BPM: ${String.format(Locale.US, "%.1f", detectedBpm)}",
-                        color = CyanAccent,
-                        style = MaterialTheme.typography.bodyMedium
+                        "  |  ${String.format(Locale.US, "%.1f", detectedBpm)} BPM",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
             Button(
                 onClick = onOpenLibrary,
-                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = TextGrayBox,
+                    contentColor = CyanAccent
+                ),
+                shape = RoundedCornerShape(4.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
             ) {
-                Text("Library", color = Color.Black)
+                Text("LIBRARY", style = MaterialTheme.typography.labelSmall)
             }
         }
 
-        Box(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()) {
+        // --- Visualization ---
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .border(1.dp, TextGrayBox, RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(4.dp))
+        ) {
             if (showSpectrogram) {
                 FFTVisualizer(
                     spectrogram = spectrogramData,
@@ -206,13 +248,14 @@ fun LooperScreen(
             }
         }
 
+        // --- Simple Controls Row ---
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(
+            LooperControlButton(
+                text = if (isRecording) "STOP" else "REC",
                 onClick = {
                     if (isRecording) {
                         engine.stopRecording()
@@ -227,16 +270,13 @@ fun LooperScreen(
                         }
                     }
                 },
+                isActive = isRecording,
                 enabled = !isPlaying,
-                colors = ButtonDefaults.buttonColors(containerColor = if (isRecording) ModTrackRed else CyanAccent)
-            ) {
-                Text(
-                    if (isRecording) "Stop Record" else "Record",
-                    color = if (isRecording) Color.White else Color.Black
-                )
-            }
+                modifier = Modifier.weight(1f)
+            )
 
-            Button(
+            LooperControlButton(
+                text = if (isPlaying) "STOP" else "PLAY",
                 onClick = {
                     if (isPlaying) {
                         engine.stopPlayback()
@@ -249,16 +289,13 @@ fun LooperScreen(
                         }
                     }
                 },
+                isActive = isPlaying,
                 enabled = !isRecording,
-                colors = ButtonDefaults.buttonColors(containerColor = if (isPlaying) ModTrackRed else CyanAccent)
-            ) {
-                Text(
-                    if (isPlaying) "Stop Play" else "Play",
-                    color = if (isPlaying) Color.White else Color.Black
-                )
-            }
+                modifier = Modifier.weight(1f)
+            )
 
-            Button(
+            LooperControlButton(
+                text = "ANALYZE",
                 onClick = {
                     recordingData?.let {
                         val result = analyzer.analyze(it)
@@ -269,12 +306,11 @@ fun LooperScreen(
                     }
                 },
                 enabled = recordingData != null && !isPlaying && !isRecording,
-                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
-            ) {
-                Text("Analyze", color = Color.Black)
-            }
+                modifier = Modifier.weight(1.5f)
+            )
 
-            Button(
+            LooperControlButton(
+                text = if (loadedMetadata != null) "UPDATE" else "SAVE",
                 onClick = {
                     if (loadedMetadata != null) {
                         scope.launch {
@@ -289,58 +325,27 @@ fun LooperScreen(
                         showSaveDialog = true
                     }
                 },
-                enabled = !isPlaying && !isRecording,
-                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
-            ) {
-                Text(
-                    if (loadedMetadata != null) "Update" else "Save",
-                    color = if (isPlaying || isRecording) Color.Gray else Color.Black
-                )
-            }
-        }
+                enabled = recordingData != null && !isPlaying && !isRecording,
+                modifier = Modifier.weight(1.5f)
+            )
 
-        if (recordingData != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { startSample = maxOf(0, startSample - 100) },
-                    enabled = !isPlaying && !isRecording
-                ) {
-                    Text("-", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
-                }
-                Text(
-                    "Start: $startSample",
-                    color = if (isPlaying || isRecording) Color.Gray else Color.White,
-                    style = MaterialTheme.typography.bodySmall
+            if (recordingData != null) {
+                SampleAdjustmentGroup(
+                    label = "S",
+                    value = startSample,
+                    onValueChange = { startSample = it.coerceIn(0, endSample - 100) },
+                    enabled = !isPlaying && !isRecording,
+                    modifier = Modifier.weight(2.5f)
                 )
-                IconButton(
-                    onClick = { startSample = minOf(endSample, startSample + 100) },
-                    enabled = !isPlaying && !isRecording
-                ) {
-                    Text("+", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
-                }
-                Spacer(Modifier.width(16.dp))
-                IconButton(
-                    onClick = { endSample = maxOf(startSample, endSample - 100) },
-                    enabled = !isPlaying && !isRecording
-                ) {
-                    Text("-", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
-                }
-                Text(
-                    "End: $endSample",
-                    color = if (isPlaying || isRecording) Color.Gray else Color.White,
-                    style = MaterialTheme.typography.bodySmall
+                SampleAdjustmentGroup(
+                    label = "E",
+                    value = endSample,
+                    onValueChange = {
+                        endSample = it.coerceIn(startSample + 100, recordingData?.size ?: 0)
+                    },
+                    enabled = !isPlaying && !isRecording,
+                    modifier = Modifier.weight(2.5f)
                 )
-                IconButton(onClick = {
-                    endSample = minOf(recordingData?.size ?: 0, endSample + 100)
-                }, enabled = !isPlaying && !isRecording) {
-                    Text("+", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
-                }
             }
         }
     }
@@ -372,6 +377,86 @@ fun LooperScreen(
                     engine.updatePlaybackPosition(engine.getPlaybackHeadPosition() % loopLength)
                     delay(16)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun LooperControlButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isActive: Boolean = false
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(40.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isActive) ModTrackRed else TextGrayBox,
+            contentColor = if (isActive) Color.White else CyanAccent,
+            disabledContainerColor = TextGrayBox,
+            disabledContentColor = Color.Gray
+        ),
+        shape = RoundedCornerShape(4.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp)
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun SampleAdjustmentGroup(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = TextGrayBox,
+        shape = RoundedCornerShape(4.dp),
+        modifier = modifier.height(40.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                label,
+                color = Color.Gray,
+                style = MaterialTheme.typography.labelSmall
+            )
+
+            IconButton(
+                onClick = { onValueChange(value - 100) },
+                enabled = enabled,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Text("-", color = if (enabled) CyanAccent else Color.Gray, fontSize = 16.sp)
+            }
+
+            Text(
+                value.toString(),
+                color = if (enabled) CyanAccent else Color.Gray,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+
+            IconButton(
+                onClick = { onValueChange(value + 100) },
+                enabled = enabled,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Text("+", color = if (enabled) CyanAccent else Color.Gray, fontSize = 16.sp)
             }
         }
     }

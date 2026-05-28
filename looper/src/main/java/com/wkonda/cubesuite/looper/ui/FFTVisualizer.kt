@@ -28,9 +28,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
-import com.wkonda.cubesuite.ui.theme.ModTrackRed
 import kotlin.math.abs
 
 @Composable
@@ -114,7 +114,7 @@ fun FFTVisualizer(
                     val startX = localStart * width / totalSamples
                     val endX = localEnd * width / totalSamples
 
-                    val handleRadius = 150f
+                    val handleRadius = 40.dp.toPx()
                     selectedHandle = when {
                         !isPlaying && abs(down.position.x - startX) < handleRadius -> 0
                         !isPlaying && abs(down.position.x - endX) < handleRadius -> 1
@@ -152,27 +152,21 @@ fun FFTVisualizer(
             // Draw selection handles
             val startX = localStart * width / totalSamples
             val endX = localEnd * width / totalSamples
-            val alpha = if (isPlaying) 0.5f else 1.0f
-            val startColor =
-                (if (selectedHandle == 0) Color.White else ModTrackRed).copy(alpha = alpha)
-            val endColor =
-                (if (selectedHandle == 1) Color.White else ModTrackRed).copy(alpha = alpha)
 
-            if (startX in -50f..width + 50f) {
-                drawLine(startColor, Offset(startX, 0f), Offset(startX, height), 15f)
-                drawCircle(startColor, 60f, Offset(startX, height - 150f))
-                drawCircle(startColor, 60f, Offset(startX, 150f))
+            val startColor = if (selectedHandle == 0) Color.White else CyanAccent
+            val endColor = if (selectedHandle == 1) Color.White else CyanAccent
+
+            if (startX in 0f..width) {
+                drawLine(startColor, Offset(startX, 0f), Offset(startX, height), 2.dp.toPx())
             }
-            if (endX in -50f..width + 50f) {
-                drawLine(endColor, Offset(endX, 0f), Offset(endX, height), 15f)
-                drawCircle(endColor, 60f, Offset(endX, height - 150f))
-                drawCircle(endColor, 60f, Offset(endX, 150f))
+            if (endX in 0f..width) {
+                drawLine(endColor, Offset(endX, 0f), Offset(endX, height), 2.dp.toPx())
             }
 
             if (isPlaying) {
                 val cursorX = (localStart + playbackPosition) * width / totalSamples
                 if (cursorX in 0f..width) {
-                    drawLine(Color.Cyan, Offset(cursorX, 0f), Offset(cursorX, height), 5f)
+                    drawLine(Color.White, Offset(cursorX, 0f), Offset(cursorX, height), 1.dp.toPx())
                 }
             }
 
@@ -190,8 +184,8 @@ fun FFTVisualizer(
 
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.argb(180, 255, 255, 255)
-                    textSize = 32f
+                    color = android.graphics.Color.argb(100, 255, 255, 255)
+                    textSize = 24f
                 }
                 notes.forEach { (name, freq) ->
                     val logF = kotlin.math.log2(freq)

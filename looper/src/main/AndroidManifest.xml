@@ -14,7 +14,7 @@
             android:name=".LooperActivity"
             android:exported="true"
             android:label="Looper"
-            android:screenOrientation="portrait">
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
