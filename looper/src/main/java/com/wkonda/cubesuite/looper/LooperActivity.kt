@@ -151,6 +151,7 @@ fun LooperScreen(
     var startSample by remember { mutableIntStateOf(0) }
     var endSample by remember { mutableIntStateOf(0) }
     var detectedBpm by remember { mutableDoubleStateOf(0.0) }
+    var detectedSignature by remember { mutableStateOf("4/4") }
     var spectrogramData by remember { mutableStateOf(emptyList<List<Double>>()) }
     var showSpectrogram by remember { mutableStateOf(false) }
     var loopName by remember { mutableStateOf("New Loop") }
@@ -195,7 +196,13 @@ fun LooperScreen(
                 )
                 if (detectedBpm > 0) {
                     Text(
-                        "  |  ${String.format(Locale.US, "%.1f", detectedBpm)} BPM",
+                        "  |  ${
+                            String.format(
+                                Locale.US,
+                                "%.1f",
+                                detectedBpm
+                            )
+                        } BPM ($detectedSignature)",
                         color = Color.Gray,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -297,12 +304,27 @@ fun LooperScreen(
             LooperControlButton(
                 text = "ANALYZE",
                 onClick = {
-                    recordingData?.let {
-                        val result = analyzer.analyze(it)
-                        startSample = result.startSample
-                        endSample = result.endSample
-                        detectedBpm = result.bpm
-                        showSpectrogram = true
+                    recordingData?.let { data ->
+                        if (!showSpectrogram) {
+                            val result = analyzer.analyze(data)
+                            startSample = result.startSample
+                            endSample = result.endSample
+                            detectedBpm = result.bpm
+                            detectedSignature = result.timeSignature
+                            showSpectrogram = true
+                        } else {
+                            // Refine existing selection
+                            val result = analyzer.snapToSeamlessLoop(
+                                data,
+                                startSample,
+                                endSample,
+                                detectedBpm,
+                                detectedSignature
+                            )
+                            startSample = result.startSample
+                            endSample = result.endSample
+                            detectedBpm = result.bpm
+                        }
                     }
                 },
                 enabled = recordingData != null && !isPlaying && !isRecording,

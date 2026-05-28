@@ -81,6 +81,28 @@ class LooperEngine {
         if (startSample >= endSample || endSample > data.size) return@withContext
 
         val loopLength = endSample - startSample
+        val crossfadeLen =
+            (sampleRate * 0.005).toInt().coerceAtMost(loopLength / 4) // 5ms crossfade
+
+        // Create a copy of the loop data to apply crossfade for seamless looping
+        val loopBuffer = ShortArray(loopLength)
+        System.arraycopy(data, startSample, loopBuffer, 0, loopLength)
+
+        // Apply crossfade: blend the beginning of the loop into the end
+        for (i in 0 until crossfadeLen) {
+            val ratio = i.toDouble() / crossfadeLen
+            val endIdx = loopLength - crossfadeLen + i
+            val startIdx = i
+
+            val startSampleVal = loopBuffer[startIdx].toDouble()
+            val endSampleVal = loopBuffer[endIdx].toDouble()
+
+            // Result = End * (1-ratio) + Start * ratio
+            val blended = (endSampleVal * (1.0 - ratio) + startSampleVal * ratio).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            loopBuffer[endIdx] = blended.toShort()
+        }
+
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
                 android.media.AudioAttributes.Builder()
@@ -99,7 +121,7 @@ class LooperEngine {
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
 
-        audioTrack?.write(data, startSample, loopLength)
+        audioTrack?.write(loopBuffer, 0, loopLength)
         audioTrack?.setLoopPoints(0, loopLength, -1)
         audioTrack?.play()
         isPlaying = true
