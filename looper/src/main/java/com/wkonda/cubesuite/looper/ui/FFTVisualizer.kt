@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import kotlin.math.abs
+import kotlin.math.pow
 
 @Composable
 fun FFTVisualizer(
@@ -49,6 +50,18 @@ fun FFTVisualizer(
     var selectedHandle by remember { mutableStateOf<Int?>(null) }
     var localStart by remember { mutableIntStateOf(startSample) }
     var localEnd by remember { mutableIntStateOf(endSample) }
+
+    val notes = remember {
+        val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+        (40..64).map { midi ->
+            val octave = (midi / 12) - 1
+            val baseName = names[midi % 12]
+            val name = baseName + octave
+            val freq = 440f * 2.0.pow((midi - 69.0) / 12.0).toFloat()
+            val isWhite = !baseName.contains("#")
+            Triple(name, freq, isWhite)
+        }
+    }
 
     LaunchedEffect(startSample, endSample) {
         localStart = startSample
@@ -171,14 +184,8 @@ fun FFTVisualizer(
             }
 
             // Draw note labels
-            val notes = listOf(
-                "E2" to 82.41f, "F2" to 87.31f, "G2" to 98.00f, "A2" to 110.00f, "B2" to 123.47f,
-                "C3" to 130.81f, "D3" to 146.83f, "E3" to 164.81f, "F3" to 174.61f, "G3" to 196.00f,
-                "A3" to 220.00f, "B3" to 246.94f, "C4" to 261.63f, "D4" to 293.66f, "E4" to 329.63f
-            )
-
-            val fromHz = 82f
-            val toHz = 330f
+            val fromHz = 82.41f
+            val toHz = 329.63f
             val logFrom = kotlin.math.log2(fromHz)
             val logTo = kotlin.math.log2(toHz)
 
@@ -187,13 +194,27 @@ fun FFTVisualizer(
                     color = android.graphics.Color.argb(100, 255, 255, 255)
                     textSize = 24f
                 }
-                notes.forEach { (name, freq) ->
+                notes.forEach { (name, freq, isWhite) ->
                     val logF = kotlin.math.log2(freq)
                     val ratio = (logF - logFrom) / (logTo - logFrom)
                     val y = height - ratio * height
 
-                    canvas.nativeCanvas.drawText(name, 10f, y, paint)
-                    drawLine(Color.White.copy(alpha = 0.15f), Offset(0f, y), Offset(width, y), 1f)
+                    if (isWhite) {
+                        canvas.nativeCanvas.drawText(name, 10f, y, paint)
+                        drawLine(
+                            Color.White.copy(alpha = 0.15f),
+                            Offset(0f, y),
+                            Offset(width, y),
+                            1f
+                        )
+                    } else {
+                        drawLine(
+                            Color.White.copy(alpha = 0.05f),
+                            Offset(0f, y),
+                            Offset(width, y),
+                            1f
+                        )
+                    }
                 }
             }
         }
@@ -204,7 +225,7 @@ fun FFTVisualizer(
 @Composable
 fun SpectrogramPreview() {
     val numWindows = 100
-    val numBins = 64
+    val numBins = 24
     val mockSpectrogram = List(numWindows) { t ->
         List(numBins) { f ->
             // Simulate a sliding sine wave

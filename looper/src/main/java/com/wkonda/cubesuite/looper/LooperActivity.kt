@@ -170,7 +170,7 @@ fun LooperScreen(
                 endSample = it.size
                 showSpectrogram = false
             }
-            spectrogramData = analyzer.getSpectrogram(it, 82f, 330f, 400, 40)
+            spectrogramData = analyzer.getSpectrogram(it, 82.41f, 329.63f, 400, 24)
         }
     }
 
