@@ -28,52 +28,42 @@ class LoopRepository(private val context: Context) {
             }
 
             val metadata = LoopMetadata(id, name, fileName, start, end, data.size)
-            val loops = getAllLoops().toMutableList()
-            loops.add(metadata)
-            saveManifest(loops)
+            saveManifest(getAllLoops() + metadata)
             metadata
         }
 
     suspend fun getAllLoops(): List<LoopMetadata> = withContext(Dispatchers.IO) {
-        if (!manifestFile.exists()) return@withContext emptyList<LoopMetadata>()
-        val json = manifestFile.readText()
-        val array = JSONArray(json)
-        val result = mutableListOf<LoopMetadata>()
-        for (i in 0 until array.length()) {
+        if (!manifestFile.exists()) return@withContext emptyList()
+        val array = JSONArray(manifestFile.readText())
+        List(array.length()) { i ->
             val obj = array.getJSONObject(i)
-            result.add(
-                LoopMetadata(
-                    obj.getString("id"),
-                    obj.getString("name"),
-                    obj.getString("fileName"),
-                    obj.getInt("startSample"),
-                    obj.getInt("endSample"),
-                    obj.getInt("totalSamples")
-                )
+            LoopMetadata(
+                obj.getString("id"),
+                obj.getString("name"),
+                obj.getString("fileName"),
+                obj.getInt("startSample"),
+                obj.getInt("endSample"),
+                obj.getInt("totalSamples")
             )
         }
-        result
     }
 
     suspend fun loadLoopData(metadata: LoopMetadata): ShortArray = withContext(Dispatchers.IO) {
         val file = File(loopsDir, metadata.fileName)
-        val size = file.length().toInt()
-        val bytes = ByteArray(size)
+        val bytes = ByteArray(file.length().toInt())
         FileInputStream(file).use { it.read(bytes) }
-        val shorts = ShortArray(size / 2)
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
-        shorts
+        ShortArray(bytes.size / 2).also { shorts ->
+            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
+        }
     }
 
     suspend fun deleteLoop(metadata: LoopMetadata) = withContext(Dispatchers.IO) {
         File(loopsDir, metadata.fileName).delete()
-        val loops = getAllLoops().filter { it.id != metadata.id }
-        saveManifest(loops)
+        saveManifest(getAllLoops().filter { it.id != metadata.id })
     }
 
     suspend fun updateLoop(metadata: LoopMetadata) = withContext(Dispatchers.IO) {
-        val loops = getAllLoops().map { if (it.id == metadata.id) metadata else it }
-        saveManifest(loops)
+        saveManifest(getAllLoops().map { if (it.id == metadata.id) metadata else it })
     }
 
     private fun saveManifest(loops: List<LoopMetadata>) {

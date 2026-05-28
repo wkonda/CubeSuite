@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 class LooperEngine {
-    private val sampleRate = 44100
+    private val sampleRate = 48000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
@@ -31,8 +31,6 @@ class LooperEngine {
     private var currentData: ShortArray? = null
     private var startSample = 0
     private var endSample = 0
-
-    private var playbackJob: kotlinx.coroutines.Job? = null
 
     @SuppressLint("MissingPermission")
     suspend fun startRecording() = withContext(Dispatchers.IO) {
@@ -54,7 +52,7 @@ class LooperEngine {
             val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
             if (read > 0) {
                 for (i in 0 until read) {
-                    dataList.add(buffer[i])
+                    dataList.add((buffer[i] * 3).toShort())
                 }
             }
         }
@@ -102,20 +100,13 @@ class LooperEngine {
             .build()
 
         audioTrack?.write(data, startSample, loopLength)
-        audioTrack?.setLoopPoints(0, loopLength, -1) // Loop infinitely
+        audioTrack?.setLoopPoints(0, loopLength, -1)
         audioTrack?.play()
         isPlaying = true
-
-        withContext(Dispatchers.Main) {
-            // We can't easily launch a long-running coroutine from startPlayback without returning
-            // But startPlayback is called from scope.launch in the UI
-        }
     }
 
     fun stopPlayback() {
         isPlaying = false
-        playbackJob?.cancel()
-        playbackJob = null
         audioTrack?.stop()
         audioTrack?.release()
         audioTrack = null

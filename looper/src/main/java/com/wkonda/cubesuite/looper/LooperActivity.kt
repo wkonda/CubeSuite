@@ -44,6 +44,7 @@ import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class LooperActivity : ComponentActivity() {
@@ -121,17 +122,12 @@ fun LooperScreen(
     val playbackPosition by engine.playbackPosition.collectAsState()
     var isRecording by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
-
-    // We synchronize these with the engine's state
     var startSample by remember { mutableStateOf(0) }
     var endSample by remember { mutableStateOf(0) }
-
     var loopName by remember { mutableStateOf("New Loop") }
     var showSaveDialog by remember { mutableStateOf(false) }
-
     val scope = rememberCoroutineScope()
 
-    // Sync UI boundaries when data is loaded from engine
     LaunchedEffect(recordingData) {
         recordingData?.let {
             if (loadedMetadata != null) {
@@ -139,18 +135,15 @@ fun LooperScreen(
                 endSample = loadedMetadata.endSample
                 loopName = loadedMetadata.name
             } else {
-                // Initial boundaries for new recording: show everything
                 startSample = 0
                 endSample = it.size
             }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -165,11 +158,9 @@ fun LooperScreen(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
+        Box(modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()) {
             WaveformView(
                 data = recordingData,
                 startSample = startSample,
@@ -192,7 +183,6 @@ fun LooperScreen(
                     if (isRecording) {
                         engine.stopRecording()
                         isRecording = false
-                        // New recording, clear metadata
                         onLoopSaved(null)
                     } else {
                         scope.launch {
@@ -201,6 +191,7 @@ fun LooperScreen(
                         }
                     }
                 },
+                enabled = !isPlaying,
                 colors = ButtonDefaults.buttonColors(containerColor = if (isRecording) ModTrackRed else CyanAccent)
             ) {
                 Text(
@@ -222,6 +213,7 @@ fun LooperScreen(
                         }
                     }
                 },
+                enabled = !isRecording,
                 colors = ButtonDefaults.buttonColors(containerColor = if (isPlaying) ModTrackRed else CyanAccent)
             ) {
                 Text(
@@ -233,7 +225,6 @@ fun LooperScreen(
             Button(
                 onClick = {
                     if (loadedMetadata != null) {
-                        // Update existing
                         scope.launch {
                             val updated = loadedMetadata.copy(
                                 startSample = startSample,
@@ -246,17 +237,16 @@ fun LooperScreen(
                         showSaveDialog = true
                     }
                 },
-                enabled = !isPlaying,
+                enabled = !isPlaying && !isRecording,
                 colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
             ) {
                 Text(
                     if (loadedMetadata != null) "Update" else "Save",
-                    color = if (isPlaying) Color.Gray else Color.Black
+                    color = if (isPlaying || isRecording) Color.Gray else Color.Black
                 )
             }
         }
 
-        // Fine tuning buttons
         if (recordingData != null) {
             Row(
                 modifier = Modifier
@@ -267,40 +257,37 @@ fun LooperScreen(
             ) {
                 IconButton(
                     onClick = { startSample = maxOf(0, startSample - 100) },
-                    enabled = !isPlaying
+                    enabled = !isPlaying && !isRecording
                 ) {
-                    Text("-", color = if (isPlaying) Color.Gray else CyanAccent)
+                    Text("-", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
                 }
                 Text(
                     "Start: $startSample",
-                    color = if (isPlaying) Color.Gray else Color.White,
+                    color = if (isPlaying || isRecording) Color.Gray else Color.White,
                     style = MaterialTheme.typography.bodySmall
                 )
                 IconButton(
                     onClick = { startSample = minOf(endSample, startSample + 100) },
-                    enabled = !isPlaying
+                    enabled = !isPlaying && !isRecording
                 ) {
-                    Text("+", color = if (isPlaying) Color.Gray else CyanAccent)
+                    Text("+", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
                 }
-
                 Spacer(Modifier.width(16.dp))
-
                 IconButton(
                     onClick = { endSample = maxOf(startSample, endSample - 100) },
-                    enabled = !isPlaying
+                    enabled = !isPlaying && !isRecording
                 ) {
-                    Text("-", color = if (isPlaying) Color.Gray else CyanAccent)
+                    Text("-", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
                 }
                 Text(
                     "End: $endSample",
-                    color = if (isPlaying) Color.Gray else Color.White,
+                    color = if (isPlaying || isRecording) Color.Gray else Color.White,
                     style = MaterialTheme.typography.bodySmall
                 )
-                IconButton(
-                    onClick = { endSample = minOf(recordingData?.size ?: 0, endSample + 100) },
-                    enabled = !isPlaying
-                ) {
-                    Text("+", color = if (isPlaying) Color.Gray else CyanAccent)
+                IconButton(onClick = {
+                    endSample = minOf(recordingData?.size ?: 0, endSample + 100)
+                }, enabled = !isPlaying && !isRecording) {
+                    Text("+", color = if (isPlaying || isRecording) Color.Gray else CyanAccent)
                 }
             }
         }
@@ -310,9 +297,7 @@ fun LooperScreen(
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
             title = { Text("Save Loop") },
-            text = {
-                TextField(value = loopName, onValueChange = { loopName = it })
-            },
+            text = { TextField(value = loopName, onValueChange = { loopName = it }) },
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
@@ -327,15 +312,13 @@ fun LooperScreen(
         )
     }
 
-    // Polling playback position
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             val loopLength = endSample - startSample
             if (loopLength > 0) {
                 while (isPlaying) {
-                    val head = engine.getPlaybackHeadPosition()
-                    engine.updatePlaybackPosition(head % loopLength)
-                    kotlinx.coroutines.delay(16)
+                    engine.updatePlaybackPosition(engine.getPlaybackHeadPosition() % loopLength)
+                    delay(16)
                 }
             }
         }

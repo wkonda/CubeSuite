@@ -36,10 +36,8 @@ fun WaveformView(
     isPlaying: Boolean = false
 ) {
     if (data == null) return
-
     var size by remember { mutableStateOf(IntSize.Zero) }
     var selectedHandle by remember { mutableStateOf<Int?>(null) }
-
     var localStart by remember { mutableIntStateOf(startSample) }
     var localEnd by remember { mutableIntStateOf(endSample) }
 
@@ -58,32 +56,21 @@ fun WaveformView(
                     val down = awaitFirstDown()
                     val width = size.width.toFloat()
                     if (width <= 0f) return@awaitEachGesture
-
                     val totalSamples = data.size.toFloat()
-
                     val startX = localStart * width / totalSamples
                     val endX = localEnd * width / totalSamples
-
-                    val hitThreshold = 150f // Extremely large hit area
-
-                    selectedHandle =
-                        if (!isPlaying && abs(down.position.x - startX) < hitThreshold) {
-                            0
-                        } else if (!isPlaying && abs(down.position.x - endX) < hitThreshold) {
-                            1
-                        } else {
-                            null
-                        }
-
+                    selectedHandle = when {
+                        !isPlaying && abs(down.position.x - startX) < 150f -> 0
+                        !isPlaying && abs(down.position.x - endX) < 150f -> 1
+                        else -> null
+                    }
                     if (selectedHandle != null) {
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull() ?: break
                             if (!change.pressed) break
-
                             val panX = change.position.x - change.previousPosition.x
                             val deltaSamples = (panX * totalSamples / width).toInt()
-
                             if (selectedHandle == 0) {
                                 localStart = (localStart + deltaSamples).coerceIn(0, localEnd)
                                 onStartChanged(localStart)
@@ -102,11 +89,8 @@ fun WaveformView(
             val width = size.width.toFloat()
             val height = size.height.toFloat()
             if (width == 0f || height == 0f) return@Canvas
-
             val centerY = height / 2
             val totalSamples = data.size.toFloat()
-
-            // Draw Waveform
             val step = max(1, (totalSamples / width).toInt())
             for (i in 0 until width.toInt()) {
                 val sampleIdx = (i * step)
@@ -114,18 +98,14 @@ fun WaveformView(
                 val value = data[sampleIdx].toFloat() / Short.MAX_VALUE
                 val lineHeight = value * centerY * 0.8f
                 drawLine(
-                    color = CyanAccent.copy(alpha = 0.4f),
-                    start = Offset(i.toFloat(), centerY - lineHeight),
-                    end = Offset(i.toFloat(), centerY + lineHeight),
-                    strokeWidth = 1f
+                    CyanAccent.copy(alpha = 0.4f),
+                    Offset(i.toFloat(), centerY - lineHeight),
+                    Offset(i.toFloat(), centerY + lineHeight),
+                    1f
                 )
             }
-
-            // Draw selection handles
             val startX = localStart * width / totalSamples
             val endX = localEnd * width / totalSamples
-
-            // Use White for selected handle, Red for idle
             val alpha = if (isPlaying) 0.5f else 1.0f
             val startColor =
                 (if (selectedHandle == 0) Color.White else ModTrackRed).copy(alpha = alpha)
@@ -142,14 +122,14 @@ fun WaveformView(
                 drawCircle(endColor, 60f, Offset(endX, height - 150f))
                 drawCircle(endColor, 60f, Offset(endX, 150f))
             }
-
-            // Draw playback cursor
             if (isPlaying) {
-                val cursorSample = localStart + playbackPosition
-                val cursorX = cursorSample * width / totalSamples
-                if (cursorX in 0f..width) {
-                    drawLine(Color.Cyan, Offset(cursorX, 0f), Offset(cursorX, height), 5f)
-                }
+                val cursorX = (localStart + playbackPosition) * width / totalSamples
+                if (cursorX in 0f..width) drawLine(
+                    Color.Cyan,
+                    Offset(cursorX, 0f),
+                    Offset(cursorX, height),
+                    5f
+                )
             }
         }
     }
