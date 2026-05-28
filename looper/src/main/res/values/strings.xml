@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Looper</string>
+    <string name="record">Record</string>
+    <string name="stop">Stop</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="save">Save</string>
+    <string name="loop_name">Loop Name</string>
+    <string name="delete">Delete</string>
+</resources>

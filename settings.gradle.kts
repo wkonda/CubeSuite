@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CubeSuite"
 include(":app")
+include(":looper")
