@@ -16,31 +16,35 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntSize
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
 import kotlin.math.abs
-import kotlin.math.max
 
 @Composable
-fun WaveformView(
-    data: ShortArray?,
+fun FFTVisualizer(
+    spectrogram: List<List<Double>>,
+    totalSamples: Int,
     startSample: Int,
     endSample: Int,
     onStartChanged: (Int) -> Unit,
     onEndChanged: (Int) -> Unit,
+    modifier: Modifier = Modifier,
     playbackPosition: Int = 0,
-    isPlaying: Boolean = false,
-    onsets: List<Int> = emptyList()
+    isPlaying: Boolean = false
 ) {
-    if (data == null) return
     var size by remember { mutableStateOf(IntSize.Zero) }
     var selectedHandle by remember { mutableStateOf<Int?>(null) }
     var localStart by remember { mutableIntStateOf(startSample) }
@@ -51,47 +55,46 @@ fun WaveformView(
         localEnd = endSample
     }
 
+    val maxMag = remember(spectrogram) {
+        spectrogram.flatten().maxOrNull()?.coerceAtLeast(0.01) ?: 1.0
+    }
+
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
             .background(AppDarkBackground)
             .onSizeChanged { size = it }
             .drawWithCache {
                 val cacheSize = this.size
                 val width = cacheSize.width
                 val height = cacheSize.height
-                if (width <= 0f || height <= 0f) {
+                if (spectrogram.isEmpty() || width <= 0f || height <= 0f) {
                     onDrawBehind { }
                 } else {
                     val bitmap = ImageBitmap(width.toInt(), height.toInt())
                     val canvas = Canvas(bitmap)
                     val drawScope = CanvasDrawScope()
-                    drawScope.draw(this, this.layoutDirection, canvas, cacheSize) {
-                        val centerY = height / 2
-                        val totalSamples = data.size.toFloat()
-                        val step = max(1, (totalSamples / width).toInt())
-                        for (i in 0 until width.toInt()) {
-                            val sampleIdx = (i * step)
-                            if (sampleIdx >= data.size) break
-                            val value = data[sampleIdx].toFloat() / Short.MAX_VALUE
-                            val lineHeight = value * centerY * 0.8f
-                            drawLine(
-                                CyanAccent.copy(alpha = 0.4f),
-                                Offset(i.toFloat(), centerY - lineHeight),
-                                Offset(i.toFloat(), centerY + lineHeight),
-                                1f
-                            )
-                        }
+                    drawScope.draw(
+                        this,
+                        this.layoutDirection,
+                        canvas,
+                        cacheSize
+                    ) {
+                        val numWindows = spectrogram.size
+                        val numBins = spectrogram[0].size
+                        val cellWidth = width / numWindows
+                        val cellHeight = height / numBins
 
-                        // Draw onsets
-                        onsets.forEach { onsetSample ->
-                            val onsetX = onsetSample * width / totalSamples
-                            if (onsetX in 0f..width) {
-                                drawLine(
-                                    Color.Yellow.copy(alpha = 0.5f),
-                                    Offset(onsetX, 0f),
-                                    Offset(onsetX, height),
-                                    2f
+                        spectrogram.forEachIndexed { tIdx, magnitudes ->
+                            magnitudes.forEachIndexed { fIdx, mag ->
+                                val intensity = (mag / maxMag).coerceIn(0.0, 1.0).toFloat()
+                                val color = lerp(AppDarkBackground, CyanAccent, intensity)
+                                drawRect(
+                                    color = color,
+                                    topLeft = Offset(
+                                        tIdx.toFloat() * cellWidth,
+                                        height - (fIdx + 1).toFloat() * cellHeight
+                                    ),
+                                    size = Size(cellWidth + 1f, cellHeight + 1f)
                                 )
                             }
                         }
@@ -101,12 +104,13 @@ fun WaveformView(
                     }
                 }
             }
-            .pointerInput(data.size) {
+            .pointerInput(totalSamples) {
+                if (totalSamples <= 0) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val width = size.width.toFloat()
                     if (width <= 0f) return@awaitEachGesture
-                    val totalSamples = data.size.toFloat()
+
                     val startX = localStart * width / totalSamples
                     val endX = localEnd * width / totalSamples
 
@@ -116,6 +120,7 @@ fun WaveformView(
                         !isPlaying && abs(down.position.x - endX) < handleRadius -> 1
                         else -> null
                     }
+
                     if (selectedHandle != null) {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -129,7 +134,7 @@ fun WaveformView(
                                 localStart = newSample.coerceIn(0, localEnd - 100)
                                 onStartChanged(localStart)
                             } else {
-                                localEnd = newSample.coerceIn(localStart + 100, data.size)
+                                localEnd = newSample.coerceIn(localStart + 100, totalSamples)
                                 onEndChanged(localEnd)
                             }
                             change.consume()
@@ -144,7 +149,7 @@ fun WaveformView(
             val height = size.height.toFloat()
             if (width == 0f || height == 0f) return@Canvas
 
-            val totalSamples = data.size.toFloat()
+            // Draw selection handles
             val startX = localStart * width / totalSamples
             val endX = localEnd * width / totalSamples
             val alpha = if (isPlaying) 0.5f else 1.0f
@@ -163,15 +168,64 @@ fun WaveformView(
                 drawCircle(endColor, 60f, Offset(endX, height - 150f))
                 drawCircle(endColor, 60f, Offset(endX, 150f))
             }
+
             if (isPlaying) {
                 val cursorX = (localStart + playbackPosition) * width / totalSamples
-                if (cursorX in 0f..width) drawLine(
-                    Color.Cyan,
-                    Offset(cursorX, 0f),
-                    Offset(cursorX, height),
-                    5f
-                )
+                if (cursorX in 0f..width) {
+                    drawLine(Color.Cyan, Offset(cursorX, 0f), Offset(cursorX, height), 5f)
+                }
+            }
+
+            // Draw note labels
+            val notes = listOf(
+                "E2" to 82.41f, "F2" to 87.31f, "G2" to 98.00f, "A2" to 110.00f, "B2" to 123.47f,
+                "C3" to 130.81f, "D3" to 146.83f, "E3" to 164.81f, "F3" to 174.61f, "G3" to 196.00f,
+                "A3" to 220.00f, "B3" to 246.94f, "C4" to 261.63f, "D4" to 293.66f, "E4" to 329.63f
+            )
+
+            val fromHz = 82f
+            val toHz = 330f
+            val logFrom = kotlin.math.log2(fromHz)
+            val logTo = kotlin.math.log2(toHz)
+
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.argb(180, 255, 255, 255)
+                    textSize = 32f
+                }
+                notes.forEach { (name, freq) ->
+                    val logF = kotlin.math.log2(freq)
+                    val ratio = (logF - logFrom) / (logTo - logFrom)
+                    val y = height - ratio * height
+
+                    canvas.nativeCanvas.drawText(name, 10f, y, paint)
+                    drawLine(Color.White.copy(alpha = 0.15f), Offset(0f, y), Offset(width, y), 1f)
+                }
             }
         }
     }
+}
+
+@Preview
+@Composable
+fun SpectrogramPreview() {
+    val numWindows = 100
+    val numBins = 64
+    val mockSpectrogram = List(numWindows) { t ->
+        List(numBins) { f ->
+            // Simulate a sliding sine wave
+            val targetF = (numBins * 0.2 + numBins * 0.6 * (t.toDouble() / numWindows)).toInt()
+            if (abs(f - targetF) < 3) 1.0 else Math.random() * 0.1
+        }
+    }
+
+    FFTVisualizer(
+        spectrogram = mockSpectrogram,
+        totalSamples = 44100,
+        startSample = 5000,
+        endSample = 35000,
+        onStartChanged = {},
+        onEndChanged = {},
+        modifier = Modifier.fillMaxSize()
+    )
 }

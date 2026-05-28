@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,9 +36,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
+import com.wkonda.cubesuite.looper.audio.AudioAnalyzer
 import com.wkonda.cubesuite.looper.audio.LooperEngine
 import com.wkonda.cubesuite.looper.data.LoopMetadata
 import com.wkonda.cubesuite.looper.data.LoopRepository
+import com.wkonda.cubesuite.looper.ui.FFTVisualizer
 import com.wkonda.cubesuite.looper.ui.LoopListScreen
 import com.wkonda.cubesuite.looper.ui.WaveformView
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
@@ -46,6 +49,7 @@ import com.wkonda.cubesuite.ui.theme.CyanAccent
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class LooperActivity : ComponentActivity() {
     private val engine = LooperEngine()
@@ -124,9 +128,13 @@ fun LooperScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var startSample by remember { mutableStateOf(0) }
     var endSample by remember { mutableStateOf(0) }
+    var detectedBpm by remember { mutableDoubleStateOf(0.0) }
+    var spectrogramData by remember { mutableStateOf(emptyList<List<Double>>()) }
+    var showSpectrogram by remember { mutableStateOf(false) }
     var loopName by remember { mutableStateOf("New Loop") }
     var showSaveDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val analyzer = remember { AudioAnalyzer() }
 
     LaunchedEffect(recordingData) {
         recordingData?.let {
@@ -134,10 +142,13 @@ fun LooperScreen(
                 startSample = loadedMetadata.startSample
                 endSample = loadedMetadata.endSample
                 loopName = loadedMetadata.name
+                showSpectrogram = false
             } else {
                 startSample = 0
                 endSample = it.size
+                showSpectrogram = false
             }
+            spectrogramData = analyzer.getSpectrogram(it, 82f, 330f, 400, 40)
         }
     }
 
@@ -149,7 +160,16 @@ fun LooperScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("LOOPER", style = MaterialTheme.typography.headlineLarge, color = ModTrackRed)
+            Column {
+                Text("LOOPER", style = MaterialTheme.typography.headlineLarge, color = ModTrackRed)
+                if (detectedBpm > 0) {
+                    Text(
+                        "BPM: ${String.format(Locale.US, "%.1f", detectedBpm)}",
+                        color = CyanAccent,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
             Button(
                 onClick = onOpenLibrary,
                 colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
@@ -161,15 +181,29 @@ fun LooperScreen(
         Box(modifier = Modifier
             .weight(1f)
             .fillMaxWidth()) {
-            WaveformView(
-                data = recordingData,
-                startSample = startSample,
-                endSample = endSample,
-                onStartChanged = { startSample = it },
-                onEndChanged = { endSample = it },
-                playbackPosition = playbackPosition,
-                isPlaying = isPlaying
-            )
+            if (showSpectrogram) {
+                FFTVisualizer(
+                    spectrogram = spectrogramData,
+                    totalSamples = recordingData?.size ?: 0,
+                    startSample = startSample,
+                    endSample = endSample,
+                    onStartChanged = { startSample = it },
+                    onEndChanged = { endSample = it },
+                    playbackPosition = playbackPosition,
+                    isPlaying = isPlaying,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                WaveformView(
+                    data = recordingData,
+                    startSample = startSample,
+                    endSample = endSample,
+                    onStartChanged = { startSample = it },
+                    onEndChanged = { endSample = it },
+                    playbackPosition = playbackPosition,
+                    isPlaying = isPlaying
+                )
+            }
         }
 
         Row(
@@ -187,6 +221,8 @@ fun LooperScreen(
                     } else {
                         scope.launch {
                             isRecording = true
+                            spectrogramData = emptyList()
+                            showSpectrogram = false
                             engine.startRecording()
                         }
                     }
@@ -220,6 +256,22 @@ fun LooperScreen(
                     if (isPlaying) "Stop Play" else "Play",
                     color = if (isPlaying) Color.White else Color.Black
                 )
+            }
+
+            Button(
+                onClick = {
+                    recordingData?.let {
+                        val result = analyzer.analyze(it)
+                        startSample = result.startSample
+                        endSample = result.endSample
+                        detectedBpm = result.bpm
+                        showSpectrogram = true
+                    }
+                },
+                enabled = recordingData != null && !isPlaying && !isRecording,
+                colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
+            ) {
+                Text("Analyze", color = Color.Black)
             }
 
             Button(
