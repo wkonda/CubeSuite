@@ -26,221 +26,138 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import kotlin.math.abs
+import kotlin.math.log2
 import kotlin.math.pow
 
 @Composable
 fun FFTVisualizer(
-    spectrogram: List<List<Double>>,
-    totalSamples: Int,
-    startSample: Int,
-    endSample: Int,
-    onStartChanged: (Int) -> Unit,
-    onEndChanged: (Int) -> Unit,
+    spec: List<List<Double>>,
+    total: Int,
+    start: Int,
+    end: Int,
+    onStart: (Int) -> Unit,
+    onEnd: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    playbackPosition: Int = 0,
-    isPlaying: Boolean = false
+    pos: Int = 0,
+    playing: Boolean = false
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
-    var selectedHandle by remember { mutableStateOf<Int?>(null) }
-    var localStart by remember { mutableIntStateOf(startSample) }
-    var localEnd by remember { mutableIntStateOf(endSample) }
-
+    var handle by remember { mutableStateOf<Int?>(null) }
+    var lStart by remember { mutableIntStateOf(start) }
+    var lEnd by remember { mutableIntStateOf(end) }
     val notes = remember {
         val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-        (40..64).map { midi ->
-            val octave = (midi / 12) - 1
-            val baseName = names[midi % 12]
-            val name = baseName + octave
-            val freq = 440f * 2.0.pow((midi - 69.0) / 12.0).toFloat()
-            val isWhite = !baseName.contains("#")
-            Triple(name, freq, isWhite)
+        (40..64).map { m ->
+            val b = names[m % 12]
+            Triple(
+                b + ((m / 12) - 1),
+                440f * 2.0.pow((m - 69.0) / 12.0).toFloat(),
+                !b.contains("#")
+            )
         }
     }
+    LaunchedEffect(start, end) { lStart = start; lEnd = end }
+    val maxM = remember(spec) { spec.flatten().maxOrNull()?.coerceAtLeast(0.01) ?: 1.0 }
 
-    LaunchedEffect(startSample, endSample) {
-        localStart = startSample
-        localEnd = endSample
-    }
-
-    val maxMag = remember(spectrogram) {
-        spectrogram.flatten().maxOrNull()?.coerceAtLeast(0.01) ?: 1.0
-    }
-
-    Box(
-        modifier = modifier
-            .background(AppDarkBackground)
-            .onSizeChanged { size = it }
-            .drawWithCache {
-                val cacheSize = this.size
-                val width = cacheSize.width
-                val height = cacheSize.height
-                if (spectrogram.isEmpty() || width <= 0f || height <= 0f) {
-                    onDrawBehind { }
-                } else {
-                    val bitmap = ImageBitmap(width.toInt(), height.toInt())
-                    val canvas = Canvas(bitmap)
-                    val drawScope = CanvasDrawScope()
-                    drawScope.draw(
-                        this,
-                        this.layoutDirection,
-                        canvas,
-                        cacheSize
-                    ) {
-                        val numWindows = spectrogram.size
-                        val numBins = spectrogram[0].size
-                        val cellWidth = width / numWindows
-                        val cellHeight = height / numBins
-
-                        spectrogram.forEachIndexed { tIdx, magnitudes ->
-                            magnitudes.forEachIndexed { fIdx, mag ->
-                                val intensity = (mag / maxMag).coerceIn(0.0, 1.0).toFloat()
-                                val color = lerp(AppDarkBackground, CyanAccent, intensity)
-                                drawRect(
-                                    color = color,
-                                    topLeft = Offset(
-                                        tIdx.toFloat() * cellWidth,
-                                        height - (fIdx + 1).toFloat() * cellHeight
-                                    ),
-                                    size = Size(cellWidth + 1f, cellHeight + 1f)
-                                )
-                            }
+    Box(modifier
+        .background(AppDarkBackground)
+        .onSizeChanged { size = it }
+        .drawWithCache {
+            val (w, h) = this.size
+            if (spec.isEmpty() || w <= 0 || h <= 0) onDrawBehind {} else {
+                val bitmap = ImageBitmap(w.toInt(), h.toInt())
+                CanvasDrawScope().draw(this, this.layoutDirection, Canvas(bitmap), this.size) {
+                    val cw = w / spec.size;
+                    val ch = h / spec[0].size
+                    spec.forEachIndexed { t, mags ->
+                        mags.forEachIndexed { f, m ->
+                            drawRect(
+                                lerp(
+                                    AppDarkBackground,
+                                    CyanAccent,
+                                    (m / maxM).coerceIn(0.0, 1.0).toFloat()
+                                ), Offset(t * cw, h - (f + 1) * ch), Size(cw + 1f, ch + 1f)
+                            )
                         }
                     }
-                    onDrawBehind {
-                        drawImage(bitmap)
-                    }
                 }
+                onDrawBehind { drawImage(bitmap) }
             }
-            .pointerInput(totalSamples) {
-                if (totalSamples <= 0) return@pointerInput
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    val width = size.width.toFloat()
-                    if (width <= 0f) return@awaitEachGesture
-
-                    val startX = localStart * width / totalSamples
-                    val endX = localEnd * width / totalSamples
-
-                    val handleRadius = 40.dp.toPx()
-                    selectedHandle = when {
-                        !isPlaying && abs(down.position.x - startX) < handleRadius -> 0
-                        !isPlaying && abs(down.position.x - endX) < handleRadius -> 1
-                        else -> null
-                    }
-
-                    if (selectedHandle != null) {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull() ?: break
-                            if (!change.pressed) break
-
-                            val currentX = change.position.x
-                            val newSample = (currentX * totalSamples / width).toInt()
-
-                            if (selectedHandle == 0) {
-                                localStart = newSample.coerceIn(0, localEnd - 100)
-                                onStartChanged(localStart)
-                            } else {
-                                localEnd = newSample.coerceIn(localStart + 100, totalSamples)
-                                onEndChanged(localEnd)
-                            }
-                            change.consume()
+        }
+        .pointerInput(total) {
+            if (total <= 0) return@pointerInput
+            awaitEachGesture {
+                val down = awaitFirstDown();
+                val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
+                val sX = lStart * w / total;
+                val eX = lEnd * w / total
+                handle = when {
+                    !playing && abs(down.position.x - sX) < 40.dp.toPx() -> 0
+                    !playing && abs(down.position.x - eX) < 40.dp.toPx() -> 1
+                    else -> null
+                }
+                if (handle != null) {
+                    while (true) {
+                        val ev = awaitPointerEvent();
+                        val ch = ev.changes.firstOrNull() ?: break
+                        if (!ch.pressed) break
+                        val n = (ch.position.x * total / w).toInt()
+                        if (handle == 0) {
+                            lStart = n.coerceIn(0, lEnd - 100); onStart(lStart)
+                        } else {
+                            lEnd = n.coerceIn(lStart + 100, total); onEnd(lEnd)
                         }
-                        selectedHandle = null
+                        ch.consume()
                     }
+                    handle = null
                 }
             }
+        }
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width.toFloat()
-            val height = size.height.toFloat()
-            if (width == 0f || height == 0f) return@Canvas
-
-            // Draw selection handles
-            val startX = localStart * width / totalSamples
-            val endX = localEnd * width / totalSamples
-
-            val startColor = if (selectedHandle == 0) Color.White else CyanAccent
-            val endColor = if (selectedHandle == 1) Color.White else CyanAccent
-
-            if (startX in 0f..width) {
-                drawLine(startColor, Offset(startX, 0f), Offset(startX, height), 2.dp.toPx())
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width.toFloat();
+            val h = size.height.toFloat()
+            if (w <= 0 || h <= 0) return@Canvas
+            val sX = lStart * w / total;
+            val eX = lEnd * w / total
+            if (sX in 0f..w) drawLine(
+                if (handle == 0) Color.White else CyanAccent,
+                Offset(sX, 0f),
+                Offset(sX, h),
+                2.dp.toPx()
+            )
+            if (eX in 0f..w) drawLine(
+                if (handle == 1) Color.White else CyanAccent,
+                Offset(eX, 0f),
+                Offset(eX, h),
+                2.dp.toPx()
+            )
+            if (playing) {
+                val cX = (lStart + pos) * w / total
+                if (cX in 0f..w) drawLine(Color.White, Offset(cX, 0f), Offset(cX, h), 1.dp.toPx())
             }
-            if (endX in 0f..width) {
-                drawLine(endColor, Offset(endX, 0f), Offset(endX, height), 2.dp.toPx())
-            }
-
-            if (isPlaying) {
-                val cursorX = (localStart + playbackPosition) * width / totalSamples
-                if (cursorX in 0f..width) {
-                    drawLine(Color.White, Offset(cursorX, 0f), Offset(cursorX, height), 1.dp.toPx())
+            val logF = log2(82.41f);
+            val logT = log2(329.63f)
+            drawIntoCanvas { c ->
+                val p = android.graphics.Paint().apply {
+                    color = android.graphics.Color.argb(100, 255, 255, 255); textSize = 24f
                 }
-            }
-
-            // Draw note labels
-            val fromHz = 82.41f
-            val toHz = 329.63f
-            val logFrom = kotlin.math.log2(fromHz)
-            val logTo = kotlin.math.log2(toHz)
-
-            drawIntoCanvas { canvas ->
-                val paint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.argb(100, 255, 255, 255)
-                    textSize = 24f
-                }
-                notes.forEach { (name, freq, isWhite) ->
-                    val logF = kotlin.math.log2(freq)
-                    val ratio = (logF - logFrom) / (logTo - logFrom)
-                    val y = height - ratio * height
-
-                    if (isWhite) {
-                        canvas.nativeCanvas.drawText(name, 10f, y, paint)
-                        drawLine(
-                            Color.White.copy(alpha = 0.15f),
+                notes.forEach { (n, f, white) ->
+                    val y = h - (log2(f) - logF) / (logT - logF) * h
+                    if (white) {
+                        c.nativeCanvas.drawText(n, 10f, y, p); drawLine(
+                            Color.White.copy(0.15f),
                             Offset(0f, y),
-                            Offset(width, y),
-                            1f
+                            Offset(w, y)
                         )
-                    } else {
-                        drawLine(
-                            Color.White.copy(alpha = 0.05f),
-                            Offset(0f, y),
-                            Offset(width, y),
-                            1f
-                        )
-                    }
+                    } else drawLine(Color.White.copy(0.05f), Offset(0f, y), Offset(w, y))
                 }
             }
         }
     }
-}
-
-@Preview
-@Composable
-fun SpectrogramPreview() {
-    val numWindows = 100
-    val numBins = 24
-    val mockSpectrogram = List(numWindows) { t ->
-        List(numBins) { f ->
-            // Simulate a sliding sine wave
-            val targetF = (numBins * 0.2 + numBins * 0.6 * (t.toDouble() / numWindows)).toInt()
-            if (abs(f - targetF) < 3) 1.0 else Math.random() * 0.1
-        }
-    }
-
-    FFTVisualizer(
-        spectrogram = mockSpectrogram,
-        totalSamples = 44100,
-        startSample = 5000,
-        endSample = 35000,
-        onStartChanged = {},
-        onEndChanged = {},
-        modifier = Modifier.fillMaxSize()
-    )
 }

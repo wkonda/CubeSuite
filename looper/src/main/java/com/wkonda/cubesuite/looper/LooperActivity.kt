@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.wkonda.cubesuite.looper.audio.AudioAnalyzer
@@ -64,70 +63,53 @@ import java.util.Locale
 
 class LooperActivity : ComponentActivity() {
     private val engine = LooperEngine()
-    private val repository by lazy { LoopRepository(this) }
+    private val repo by lazy { LoopRepository(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
-
         setContent {
             CubeSuiteTheme {
                 Surface(color = AppDarkBackground, modifier = Modifier.fillMaxSize()) {
-                    var currentScreen by remember { mutableStateOf("looper") }
-                    var activeLoopMetadata by remember { mutableStateOf<LoopMetadata?>(null) }
-
-                    if (currentScreen == "looper") {
-                        LooperScreen(
-                            engine = engine,
-                            repository = repository,
-                            loadedMetadata = activeLoopMetadata,
-                            onOpenLibrary = { currentScreen = "library" },
-                            onLoopSaved = { activeLoopMetadata = it }
-                        )
+                    var screen by remember { mutableStateOf("looper") }
+                    var active by remember { mutableStateOf<LoopMetadata?>(null) }
+                    if (screen == "looper") {
+                        LooperScreen(engine, repo, active, { screen = "library" }, { active = it })
                     } else {
                         var loops by remember { mutableStateOf(emptyList<LoopMetadata>()) }
-                        LaunchedEffect(Unit) {
-                            loops = repository.getAllLoops()
-                        }
-
-                        Column(modifier = Modifier
+                        LaunchedEffect(Unit) { loops = repo.getAllLoops() }
+                        Column(Modifier
                             .fillMaxSize()
                             .background(AppDarkBackground)) {
                             Row(
-                                modifier = Modifier
+                                Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                Arrangement.SpaceBetween,
+                                Alignment.CenterVertically
                             ) {
                                 Text("LIBRARY", color = CyanAccent, fontWeight = FontWeight.Bold)
                                 Text(
                                     "CLOSE",
                                     color = Color.Gray,
-                                    modifier = Modifier.clickable { currentScreen = "looper" },
-                                    style = MaterialTheme.typography.labelLarge
-                                )
+                                    modifier = Modifier.clickable { screen = "looper" })
                             }
-
-                            LoopListScreen(
-                                loops = loops,
-                                onLoopSelected = { loop ->
-                                    lifecycleScope.launch {
-                                        val data = repository.loadLoopData(loop)
-                                        engine.loadData(data, loop.startSample, loop.endSample)
-                                        activeLoopMetadata = loop
-                                        currentScreen = "looper"
-                                    }
-                                },
-                                onDeleteLoop = { loop ->
-                                    lifecycleScope.launch {
-                                        repository.deleteLoop(loop)
-                                        if (activeLoopMetadata?.id == loop.id) activeLoopMetadata =
-                                            null
-                                        loops = repository.getAllLoops()
-                                    }
+                            LoopListScreen(loops, { loop ->
+                                lifecycleScope.launch {
+                                    engine.loadData(
+                                        repo.loadLoopData(loop),
+                                        loop.startSample,
+                                        loop.endSample
+                                    )
+                                    active = loop; screen = "looper"
                                 }
-                            )
+                            }, { loop ->
+                                lifecycleScope.launch {
+                                    repo.deleteLoop(loop)
+                                    if (active?.id == loop.id) active = null; loops =
+                                    repo.getAllLoops()
+                                }
+                            })
                         }
                     }
                 }
@@ -139,77 +121,52 @@ class LooperActivity : ComponentActivity() {
 @Composable
 fun LooperScreen(
     engine: LooperEngine,
-    repository: LoopRepository,
-    loadedMetadata: LoopMetadata?,
-    onOpenLibrary: () -> Unit,
-    onLoopSaved: (LoopMetadata?) -> Unit
+    repo: LoopRepository,
+    loaded: LoopMetadata?,
+    onLib: () -> Unit,
+    onSave: (LoopMetadata?) -> Unit
 ) {
-    val recordingData by engine.recordingData.collectAsState()
-    val playbackPosition by engine.playbackPosition.collectAsState()
-    var isRecording by remember { mutableStateOf(false) }
+    val data by engine.recordingData.collectAsState()
+    val pos by engine.playbackPosition.collectAsState()
+    var isRec by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
-    var startSample by remember { mutableIntStateOf(0) }
-    var endSample by remember { mutableIntStateOf(0) }
-    var detectedBpm by remember { mutableDoubleStateOf(0.0) }
-    var detectedSignature by remember { mutableStateOf("4/4") }
-    var spectrogramData by remember { mutableStateOf(emptyList<List<Double>>()) }
-    var showSpectrogram by remember { mutableStateOf(false) }
-    var loopName by remember { mutableStateOf("New Loop") }
-    var showSaveDialog by remember { mutableStateOf(false) }
+    var start by remember { mutableIntStateOf(0) }
+    var end by remember { mutableIntStateOf(0) }
+    var bpm by remember { mutableDoubleStateOf(0.0) }
+    var sig by remember { mutableStateOf("4/4") }
+    var spec by remember { mutableStateOf(emptyList<List<Double>>()) }
+    var showSpec by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("New Loop") }
+    var showSave by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val analyzer = remember { AudioAnalyzer() }
 
-    LaunchedEffect(recordingData) {
-        recordingData?.let {
-            if (loadedMetadata != null) {
-                startSample = loadedMetadata.startSample
-                endSample = loadedMetadata.endSample
-                loopName = loadedMetadata.name
-                showSpectrogram = false
+    LaunchedEffect(data) {
+        data?.let {
+            if (loaded != null) {
+                start = loaded.startSample; end = loaded.endSample; showSpec = false
             } else {
-                startSample = 0
-                endSample = it.size
-                showSpectrogram = false
+                start = 0; end = it.size; showSpec = false
             }
-            spectrogramData = analyzer.getSpectrogram(it, 82.41f, 329.63f, 400, 24)
+            spec = analyzer.getSpectrogram(it, 82.41f, 329.63f, 400, 24)
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDarkBackground)
-            .padding(8.dp)
-    ) {
-        // --- Header ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Column(Modifier
+        .fillMaxSize()
+        .background(AppDarkBackground)
+        .padding(8.dp)) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "CUBE LOOPER",
-                    color = CyanAccent,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
+                Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
+                if (bpm > 0) Text(
+                    "  |  ${String.format(Locale.US, "%.1f", bpm)} BPM ($sig)",
+                    color = Color.Gray,
+                    style = MaterialTheme.typography.bodySmall
                 )
-                if (detectedBpm > 0) {
-                    Text(
-                        "  |  ${
-                            String.format(
-                                Locale.US,
-                                "%.1f",
-                                detectedBpm
-                            )
-                        } BPM ($detectedSignature)",
-                        color = Color.Gray,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
             }
             Button(
-                onClick = onOpenLibrary,
+                onLib,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TextGrayBox,
                     contentColor = CyanAccent
@@ -220,186 +177,110 @@ fun LooperScreen(
                 Text("LIBRARY", style = MaterialTheme.typography.labelSmall)
             }
         }
-
-        // --- Visualization ---
         Box(
-            modifier = Modifier
+            Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
                 .border(1.dp, TextGrayBox, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
         ) {
-            if (showSpectrogram) {
-                FFTVisualizer(
-                    spectrogram = spectrogramData,
-                    totalSamples = recordingData?.size ?: 0,
-                    startSample = startSample,
-                    endSample = endSample,
-                    onStartChanged = { startSample = it },
-                    onEndChanged = { endSample = it },
-                    playbackPosition = playbackPosition,
-                    isPlaying = isPlaying,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                WaveformView(
-                    data = recordingData,
-                    startSample = startSample,
-                    endSample = endSample,
-                    onStartChanged = { startSample = it },
-                    onEndChanged = { endSample = it },
-                    playbackPosition = playbackPosition,
-                    isPlaying = isPlaying
-                )
-            }
+            if (showSpec) FFTVisualizer(
+                spec,
+                data?.size ?: 0,
+                start,
+                end,
+                { start = it },
+                { end = it },
+                Modifier.fillMaxSize(),
+                pos,
+                isPlaying
+            )
+            else WaveformView(data, start, end, { start = it }, { end = it }, pos, isPlaying)
         }
-
-        // --- Simple Controls Row ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LooperControlButton(
-                text = if (isRecording) "STOP" else "REC",
-                onClick = {
-                    if (isRecording) {
-                        engine.stopRecording()
-                        isRecording = false
-                        onLoopSaved(null)
+        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
+            LooperControlButton(if (isRec) "STOP" else "REC", {
+                if (isRec) {
+                    engine.stopRecording(); isRec = false; onSave(null)
+                } else scope.launch {
+                    isRec = true; spec = emptyList(); showSpec = false; engine.startRecording()
+                }
+            }, Modifier.weight(1f), !isPlaying, isRec)
+            LooperControlButton(if (isPlaying) "STOP" else "PLAY", {
+                if (isPlaying) {
+                    engine.stopPlayback(); isPlaying = false
+                } else scope.launch {
+                    engine.setLoopPoints(
+                        start,
+                        end
+                    ); engine.startPlayback(); isPlaying = true
+                }
+            }, Modifier.weight(1f), !isRec, isPlaying)
+            LooperControlButton("ANALYZE", {
+                data?.let {
+                    if (!showSpec) {
+                        val r = analyzer.analyze(it); start = r.startSample; end =
+                            r.endSample; bpm = r.bpm; sig = r.timeSignature; showSpec = true
                     } else {
-                        scope.launch {
-                            isRecording = true
-                            spectrogramData = emptyList()
-                            showSpectrogram = false
-                            engine.startRecording()
-                        }
+                        val r = analyzer.snapToSeamlessLoop(it, start, end, bpm, sig); start =
+                            r.startSample; end = r.endSample; bpm = r.bpm
                     }
-                },
-                isActive = isRecording,
-                enabled = !isPlaying,
-                modifier = Modifier.weight(1f)
-            )
-
-            LooperControlButton(
-                text = if (isPlaying) "STOP" else "PLAY",
-                onClick = {
-                    if (isPlaying) {
-                        engine.stopPlayback()
-                        isPlaying = false
-                    } else {
-                        scope.launch {
-                            engine.setLoopPoints(startSample, endSample)
-                            engine.startPlayback()
-                            isPlaying = true
-                        }
-                    }
-                },
-                isActive = isPlaying,
-                enabled = !isRecording,
-                modifier = Modifier.weight(1f)
-            )
-
-            LooperControlButton(
-                text = "ANALYZE",
-                onClick = {
-                    recordingData?.let { data ->
-                        if (!showSpectrogram) {
-                            val result = analyzer.analyze(data)
-                            startSample = result.startSample
-                            endSample = result.endSample
-                            detectedBpm = result.bpm
-                            detectedSignature = result.timeSignature
-                            showSpectrogram = true
-                        } else {
-                            // Refine existing selection
-                            val result = analyzer.snapToSeamlessLoop(
-                                data,
-                                startSample,
-                                endSample,
-                                detectedBpm,
-                                detectedSignature
-                            )
-                            startSample = result.startSample
-                            endSample = result.endSample
-                            detectedBpm = result.bpm
-                        }
-                    }
-                },
-                enabled = recordingData != null && !isPlaying && !isRecording,
-                modifier = Modifier.weight(1.5f)
-            )
-
-            LooperControlButton(
-                text = if (loadedMetadata != null) "UPDATE" else "SAVE",
-                onClick = {
-                    if (loadedMetadata != null) {
-                        scope.launch {
-                            val updated = loadedMetadata.copy(
-                                startSample = startSample,
-                                endSample = endSample
-                            )
-                            repository.updateLoop(updated)
-                            onLoopSaved(updated)
-                        }
-                    } else {
-                        showSaveDialog = true
-                    }
-                },
-                enabled = recordingData != null && !isPlaying && !isRecording,
-                modifier = Modifier.weight(1.5f)
-            )
-
-            if (recordingData != null) {
-                SampleAdjustmentGroup(
-                    label = "S",
-                    value = startSample,
-                    onValueChange = { startSample = it.coerceIn(0, endSample - 100) },
-                    enabled = !isPlaying && !isRecording,
-                    modifier = Modifier.weight(2.5f)
+                }
+            }, Modifier.weight(1.5f), data != null && !isPlaying && !isRec)
+            LooperControlButton(if (loaded != null) "UPDATE" else "SAVE", {
+                if (loaded != null) scope.launch {
+                    val u = loaded.copy(
+                        startSample = start,
+                        endSample = end
+                    ); repo.updateLoop(u); onSave(u)
+                }
+                else showSave = true
+            }, Modifier.weight(1.5f), data != null && !isPlaying && !isRec)
+            if (data != null) {
+                Adj(
+                    "S",
+                    start,
+                    { start = it.coerceIn(0, end - 100) },
+                    !isPlaying && !isRec,
+                    Modifier.weight(2.5f)
                 )
-                SampleAdjustmentGroup(
-                    label = "E",
-                    value = endSample,
-                    onValueChange = {
-                        endSample = it.coerceIn(startSample + 100, recordingData?.size ?: 0)
-                    },
-                    enabled = !isPlaying && !isRecording,
-                    modifier = Modifier.weight(2.5f)
+                Adj(
+                    "E",
+                    end,
+                    { end = it.coerceIn(start + 100, data?.size ?: 0) },
+                    !isPlaying && !isRec,
+                    Modifier.weight(2.5f)
                 )
             }
         }
     }
 
-    if (showSaveDialog) {
-        AlertDialog(
-            onDismissRequest = { showSaveDialog = false },
-            title = { Text("Save Loop") },
-            text = { TextField(value = loopName, onValueChange = { loopName = it }) },
-            confirmButton = {
-                Button(onClick = {
-                    scope.launch {
-                        recordingData?.let {
-                            val saved = repository.saveLoop(loopName, it, startSample, endSample)
-                            onLoopSaved(saved)
-                        }
-                        showSaveDialog = false
-                    }
-                }) { Text("Save") }
-            }
-        )
-    }
+    if (showSave) AlertDialog(
+        onDismissRequest = { showSave = false },
+        confirmButton = {
+            Button(onClick = {
+                scope.launch {
+                    data?.let {
+                        onSave(
+                            repo.saveLoop(
+                                name,
+                                it,
+                                start,
+                                end
+                            )
+                        )
+                    }; showSave = false
+                }
+            }) { Text("Save") }
+        },
+        title = { Text("Save") },
+        text = { TextField(name, { name = it }) })
 
     LaunchedEffect(isPlaying) {
-        if (isPlaying) {
-            val loopLength = endSample - startSample
-            if (loopLength > 0) {
-                while (isPlaying) {
-                    engine.updatePlaybackPosition(engine.getPlaybackHeadPosition() % loopLength)
-                    delay(16)
-                }
-            }
+        if (isPlaying && (end - start) > 0) while (isPlaying) {
+            engine.updatePlaybackPosition(engine.getPlaybackHeadPosition() % (end - start)); delay(
+                16
+            )
         }
     }
 }
@@ -410,31 +291,25 @@ fun LooperControlButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    isActive: Boolean = false
+    active: Boolean = false
 ) {
     Button(
         onClick = onClick,
-        enabled = enabled,
         modifier = modifier.height(40.dp),
+        enabled = enabled,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isActive) ModTrackRed else TextGrayBox,
-            contentColor = if (isActive) Color.White else CyanAccent,
-            disabledContainerColor = TextGrayBox,
-            disabledContentColor = Color.Gray
+            containerColor = if (active) ModTrackRed else TextGrayBox,
+            contentColor = if (active) Color.White else CyanAccent
         ),
         shape = RoundedCornerShape(4.dp),
         contentPadding = PaddingValues(horizontal = 8.dp)
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold
-        )
+        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun SampleAdjustmentGroup(
+fun Adj(
     label: String,
     value: Int,
     onValueChange: (Int) -> Unit,
@@ -442,44 +317,33 @@ fun SampleAdjustmentGroup(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = TextGrayBox,
+        modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(4.dp),
-        modifier = modifier.height(40.dp)
+        color = TextGrayBox
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp),
+            Modifier.padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                label,
-                color = Color.Gray,
-                style = MaterialTheme.typography.labelSmall
-            )
-
+            Text(label, color = Color.Gray, style = MaterialTheme.typography.labelSmall)
             IconButton(
                 onClick = { onValueChange(value - 100) },
-                enabled = enabled,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Text("-", color = if (enabled) CyanAccent else Color.Gray, fontSize = 16.sp)
-            }
-
+                modifier = Modifier.size(24.dp),
+                enabled = enabled
+            ) { Text("-", color = if (enabled) CyanAccent else Color.Gray) }
             Text(
                 value.toString(),
-                color = if (enabled) CyanAccent else Color.Gray,
-                style = MaterialTheme.typography.bodySmall,
+                Modifier.weight(1f),
+                if (enabled) CyanAccent else Color.Gray,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
+                style = MaterialTheme.typography.bodySmall
             )
-
             IconButton(
                 onClick = { onValueChange(value + 100) },
-                enabled = enabled,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Text("+", color = if (enabled) CyanAccent else Color.Gray, fontSize = 16.sp)
-            }
+                modifier = Modifier.size(24.dp),
+                enabled = enabled
+            ) { Text("+", color = if (enabled) CyanAccent else Color.Gray) }
         }
     }
 }
