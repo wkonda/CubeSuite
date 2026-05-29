@@ -16,20 +16,35 @@ class LoopRepository(context: Context) {
     private val dir = File(context.filesDir, "loops").apply { mkdirs() }
     private val manifest = File(dir, "manifest.json")
 
-    suspend fun saveLoop(name: String, data: ShortArray, start: Int, end: Int) =
-        withContext(Dispatchers.IO) {
-            val id = System.currentTimeMillis().toString()
-            val file = File(dir, "$id.pcm")
-            FileOutputStream(file).use { fos ->
-                val buf = ByteBuffer.allocate(data.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-                data.forEach { buf.putShort(it) }
-                fos.write(buf.array())
+    suspend fun saveLoop(
+        name: String,
+        data: ShortArray,
+        start: Int,
+        end: Int,
+        bpm: Double?,
+        sig: String
+    ) = withContext(Dispatchers.IO) {
+        val id = System.currentTimeMillis().toString()
+        val file = File(dir, "$id.pcm")
+        FileOutputStream(file).use { fos ->
+            val buf = ByteBuffer.allocate(data.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+            data.forEach { buf.putShort(it) }
+            fos.write(buf.array())
         }
-            val meta =
-                LoopMetadata(id, name, file.name, start, end, data.size, LooperConfig.SAMPLE_RATE)
-            saveManifest(getAllLoops() + meta)
-            meta
-        }
+        val meta = LoopMetadata(
+            id,
+            name,
+            file.name,
+            start,
+            end,
+            data.size,
+            bpm,
+            sig,
+            LooperConfig.SAMPLE_RATE
+        )
+        saveManifest(getAllLoops() + meta)
+        meta
+    }
 
     suspend fun getAllLoops(): List<LoopMetadata> = withContext(Dispatchers.IO) {
         if (!manifest.exists()) return@withContext emptyList()
@@ -37,12 +52,9 @@ class LoopRepository(context: Context) {
         List(arr.length()) { i ->
             val o = arr.getJSONObject(i)
             LoopMetadata(
-                o.getString("id"),
-                o.getString("name"),
-                o.getString("file"),
-                o.getInt("start"),
-                o.getInt("end"),
-                o.getInt("total"),
+                o.getString("id"), o.getString("name"), o.getString("file"),
+                o.getInt("start"), o.getInt("end"), o.getInt("total"),
+                if (o.has("bpm")) o.getDouble("bpm") else null, o.optString("sig", "4/4"),
                 o.optInt("rate", LooperConfig.SAMPLE_RATE)
             )
         }
@@ -70,13 +82,15 @@ class LoopRepository(context: Context) {
         val arr = JSONArray()
         loops.forEach {
             arr.put(JSONObject().apply {
-                put("id", it.id); put(
-                "name",
-                it.name
-            ); put("file", it.fileName); put("start", it.startSample); put(
-                "end",
-                it.endSample
-            ); put("total", it.totalSamples); put("rate", it.sampleRate)
+                put("id", it.id); put("name", it.name); put("file", it.fileName)
+                put("start", it.startSample); put("end", it.endSample); put(
+                "total",
+                it.totalSamples
+            )
+                put("bpm", it.bpm ?: JSONObject.NULL); put("sig", it.timeSignature); put(
+                "rate",
+                it.sampleRate
+            )
             })
         }
         manifest.writeText(arr.toString())

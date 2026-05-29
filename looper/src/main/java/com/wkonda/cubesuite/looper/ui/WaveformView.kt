@@ -69,15 +69,16 @@ fun WaveformView(
                 onDrawBehind { drawImage(bitmap) }
             }
         }
-        .pointerInput(data.size) {
+        .pointerInput(data.size, playing) {
+            if (playing) return@pointerInput
             awaitEachGesture {
                 val down = awaitFirstDown();
                 val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
-                val sX = lStart * w / data.size;
-                val eX = lEnd * w / data.size
+                val sX = lStart.toFloat() * w / data.size;
+                val eX = lEnd.toFloat() * w / data.size
                 handle = when {
-                    !playing && abs(down.position.x - sX) < 40.dp.toPx() -> 0
-                    !playing && abs(down.position.x - eX) < 40.dp.toPx() -> 1
+                    abs(down.position.x - sX) < 40.dp.toPx() -> 0
+                    abs(down.position.x - eX) < 40.dp.toPx() -> 1
                     else -> null
                 }
                 if (handle != null) {

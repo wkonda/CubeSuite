@@ -88,21 +88,22 @@ fun FFTVisualizer(
                 onDrawBehind { drawImage(bitmap) }
             }
         }
-        .pointerInput(total) {
-            if (total <= 0) return@pointerInput
+        .pointerInput(total, playing) {
+            if (total <= 0 || playing) return@pointerInput
             awaitEachGesture {
-                val down = awaitFirstDown();
-                val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
-                val sX = lStart * w / total;
-                val eX = lEnd * w / total
+                val down = awaitFirstDown()
+                val w = size.width.toFloat()
+                if (w <= 0) return@awaitEachGesture
+                val sX = lStart.toFloat() * w / total
+                val eX = lEnd.toFloat() * w / total
                 handle = when {
-                    !playing && abs(down.position.x - sX) < 40.dp.toPx() -> 0
-                    !playing && abs(down.position.x - eX) < 40.dp.toPx() -> 1
+                    abs(down.position.x - sX) < 40.dp.toPx() -> 0
+                    abs(down.position.x - eX) < 40.dp.toPx() -> 1
                     else -> null
                 }
                 if (handle != null) {
                     while (true) {
-                        val ev = awaitPointerEvent();
+                        val ev = awaitPointerEvent()
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
                         val n = (ch.position.x * total / w).toInt()

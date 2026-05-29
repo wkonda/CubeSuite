@@ -21,7 +21,7 @@ data class LooperUiState(
     val isPlaying: Boolean = false,
     val startSample: Int = 0,
     val endSample: Int = 0,
-    val bpm: Double = 0.0,
+    val bpm: Double? = null,
     val timeSignature: String = "4/4",
     val spectrogram: List<List<Double>> = emptyList(),
     val showSpectrogram: Boolean = false,
@@ -131,7 +131,7 @@ class LooperViewModel(
                 data,
                 _uiState.value.startSample,
                 _uiState.value.endSample,
-                _uiState.value.bpm,
+                _uiState.value.bpm ?: 120.0,
                 _uiState.value.timeSignature
             )
             _uiState.update {
@@ -171,6 +171,10 @@ class LooperViewModel(
         _uiState.update { it.copy(loopName = name) }
     }
 
+    fun toggleView() {
+        _uiState.update { it.copy(showSpectrogram = !it.showSpectrogram) }
+    }
+
     fun saveOrUpdate() {
         viewModelScope.launch {
             val state = _uiState.value
@@ -178,13 +182,17 @@ class LooperViewModel(
             if (state.activeLoop != null) {
                 val updated = state.activeLoop.copy(
                     startSample = state.startSample,
-                    endSample = state.endSample
+                    endSample = state.endSample,
+                    bpm = state.bpm,
+                    timeSignature = state.timeSignature
                 )
                 repository.updateLoop(updated)
                 _uiState.update { it.copy(activeLoop = updated) }
             } else {
-                val saved =
-                    repository.saveLoop(state.loopName, data, state.startSample, state.endSample)
+                val saved = repository.saveLoop(
+                    state.loopName, data, state.startSample, state.endSample,
+                    state.bpm, state.timeSignature
+                )
                 _uiState.update { it.copy(activeLoop = saved, showSaveDialog = false) }
             }
         }
@@ -199,6 +207,8 @@ class LooperViewModel(
                     activeLoop = loop,
                     startSample = loop.startSample,
                     endSample = loop.endSample,
+                    bpm = loop.bpm,
+                    timeSignature = loop.timeSignature,
                     screen = "looper",
                     showSpectrogram = false
                 )

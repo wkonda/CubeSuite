@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
@@ -53,6 +56,9 @@ class LooperActivity : ComponentActivity() {
     private val vm by lazy { LooperViewModel(LooperEngine(), LoopRepository(this)) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.parseColor("#161616")
+        window.navigationBarColor = android.graphics.Color.parseColor("#161616")
+
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
         setContent {
             CubeSuiteTheme {
@@ -75,7 +81,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
-                if (s.bpm > 0) Text(
+                if (s.bpm != null && s.bpm > 0) Text(
                     "  |  ${
                         String.format(
                             Locale.US,
@@ -87,16 +93,35 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            Button(
-                { vm.setScreen("library") },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = TextGrayBox,
-                    contentColor = CyanAccent
-                ),
-                shape = RoundedCornerShape(4.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("LIBRARY", style = MaterialTheme.typography.labelSmall)
+                Button(
+                    { vm.toggleView() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = TextGrayBox,
+                        contentColor = CyanAccent
+                    ),
+                    shape = RoundedCornerShape(4.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text(
+                        if (s.showSpectrogram) "WAVE" else "SPECTRO",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Button(
+                    { vm.setScreen("library") },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = TextGrayBox,
+                        contentColor = CyanAccent
+                    ),
+                    shape = RoundedCornerShape(4.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                ) {
+                    Text("LIBRARY", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
         Box(
@@ -177,7 +202,15 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
         onDismissRequest = { vm.hideSave() },
         confirmButton = { Button({ vm.saveOrUpdate() }) { Text("Save") } },
         title = { Text("Save") },
-        text = { TextField(s.loopName, { vm.updateLoopName(it) }) })
+        text = {
+            TextField(
+                value = s.loopName,
+                onValueChange = { vm.updateLoopName(it) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { vm.saveOrUpdate() })
+            )
+        })
 }
 
 @Composable

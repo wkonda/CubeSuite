@@ -4,6 +4,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.log2
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -11,7 +12,7 @@ import kotlin.math.sqrt
 class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
 
     data class AnalysisResult(
-        val bpm: Double,
+        val bpm: Double? = null,
         val startSample: Int,
         val endSample: Int,
         val onsets: List<Int>,
@@ -22,13 +23,14 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
     fun analyze(data: ShortArray): AnalysisResult {
         if (data.isEmpty()) return AnalysisResult(120.0, 0, 0, emptyList())
         val step = LooperConfig.FFT_STEP_SIZE
-        val (onsets, flux) = detectOnsetsWithFlux(data)
+        val (onsets, lowFlux, highFlux) = detectMultiBandNovelty(data, step)
+        val combinedFlux = DoubleArray(lowFlux.size) { i -> lowFlux[i] * 1.5 + highFlux[i] }
         val fluxSR = sampleRate.toDouble() / step
-        val beatP = estimateBeatPeriod(flux, fluxSR)
+        val beatP = estimateBeatPeriod(combinedFlux, fluxSR)
         val first = onsets.firstOrNull { it.energy > 0.5 } ?: onsets.firstOrNull() ?: Onset(0, 0.0)
         val start = AudioUtils.findNearestZeroCrossing(data, first.sampleIndex)
-        val (loopF, sig) = detectLoopAndSignature(flux, beatP)
-        val refinedL = findFineLoopPoint(data, start, (loopF * step).toInt())
+        val (loopF, sig) = detectLoopAndSignature(combinedFlux, beatP)
+        val refinedL = findProLoopPoint(data, start, (loopF * step).toInt())
         return AnalysisResult(
             60.0 / (beatP / fluxSR),
             start,
@@ -47,28 +49,8 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
     ): AnalysisResult {
         if (data.isEmpty()) return AnalysisResult(curBpm, start, end, emptyList(), emptyList(), sig)
         val sS = AudioUtils.findNearestZeroCrossing(data, start)
-        val range = (sampleRate * 2.0).toInt()
-        val win = (sampleRate * 0.1).toInt()
-        var bestL = end - sS
-        var minC = Double.MAX_VALUE
-        val minS =
-            (bestL - range).coerceAtLeast(((sampleRate * LooperConfig.MIN_LOOP_LENGTH_MS) / 1000.0).toInt())
-        val maxS = (bestL + range).coerceAtMost(data.size - sS - win)
-
-        for (lag in minS..maxS) {
-            if (data[sS + lag] <= 0 && data[sS + lag + 1] > 0) {
-                var mse = 0.0
-                val eW = win.coerceAtMost(data.size - sS - lag)
-                for (i in 0 until eW) mse += (data[sS + i].toDouble() - data[sS + lag + i].toDouble()).pow(
-                    2
-                )
-                val cost = (mse / eW) + (abs((sS + lag) - end).toDouble() / sampleRate) * 1000.0
-                if (cost < minC) {
-                    minC = cost; bestL = lag
-                }
-            }
-        }
-        val sE = sS + bestL;
+        val refinedL = findProLoopPoint(data, sS, end - sS, searchRangeSec = 2.0)
+        val sE = sS + refinedL;
         val loopS = sE - sS
         val bpb = sig.split("/")[0].toIntOrNull() ?: 4
         val bars =
@@ -84,9 +66,11 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
         )
     }
 
-    private fun detectOnsetsWithFlux(data: ShortArray): Pair<List<Onset>, DoubleArray> {
+    private fun detectMultiBandNovelty(
+        data: ShortArray,
+        step: Int
+    ): Triple<List<Onset>, DoubleArray, DoubleArray> {
         val win = LooperConfig.FFT_WINDOW_SIZE;
-        val step = LooperConfig.FFT_STEP_SIZE
         val specs = mutableListOf<DoubleArray>()
         for (i in 0 until data.size - win step step) {
             val buf = DoubleArray(win * 2)
@@ -95,23 +79,60 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
             AudioUtils.fft(buf)
             specs.add(DoubleArray(win / 2) { k -> sqrt(buf[k * 2].pow(2) + buf[k * 2 + 1].pow(2)) })
         }
-        val flux = DoubleArray(specs.size)
+        val lowFlux = DoubleArray(specs.size);
+        val highFlux = DoubleArray(specs.size)
+        val lowCut = (win / 2) / 8 
         for (i in 1 until specs.size) {
-            var sum = 0.0; for (k in 0 until specs[i].size) {
-                val d = specs[i][k] - specs[i - 1][k]; if (d > 0) sum += d
+            for (k in 0 until specs[i].size) {
+                val d = max(0.0, specs[i][k] - specs[i - 1][k])
+                if (k < lowCut) lowFlux[i] += d else highFlux[i] += d
             }
-            flux[i] = sum
         }
-        val onsets = mutableListOf<Onset>()
-        for (i in 1 until flux.size - 1) {
-            val start = (i - 5).coerceAtLeast(0);
-            val end = (i + 5).coerceAtMost(flux.size - 1)
-            var sum = 0.0; for (j in start..end) sum += flux[j]
-            if (flux[i] > flux[i - 1] && flux[i] > flux[i + 1] && flux[i] > (sum / (end - start + 1)) * 3.5 && flux[i] > 0.1) onsets.add(
-                Onset(i * step, flux[i])
+        val onsets = mutableListOf<Onset>();
+        val combined = DoubleArray(lowFlux.size) { i -> lowFlux[i] + highFlux[i] }
+        for (i in 2 until combined.size - 2) {
+            var sum = 0.0; for (j in -2..2) sum += combined[i + j]
+            val localMean = sum / 5.0
+            if (combined[i] > combined[i - 1] && combined[i] > combined[i + 1] && combined[i] > localMean * 2.5 && combined[i] > 0.05) onsets.add(
+                Onset(i * step, combined[i])
             )
         }
-        return Pair(onsets, flux)
+        return Triple(onsets, lowFlux, highFlux)
+    }
+
+    private fun findProLoopPoint(
+        data: ShortArray,
+        start: Int,
+        estL: Int,
+        searchRangeSec: Double = 0.15
+    ): Int {
+        val range = (sampleRate * searchRangeSec).toInt();
+        val win = (sampleRate * 0.04).toInt()
+        var bestL = estL;
+        var maxSim = -1.0
+        val minS = (estL - range).coerceAtLeast((sampleRate * 0.1).toInt())
+        val maxS = (estL + range).coerceAtMost(data.size - start - win)
+
+        val sSig = DoubleArray(win) { i -> data[start + i].toDouble() }
+        var sSum = 0.0; for (v in sSig) sSum += v * v
+        val sNorm = sqrt(sSum)
+
+        for (lag in minS..maxS) {
+            if (data[start + lag] <= 0 && data[start + lag + 1] > 0) {
+                val eSig = DoubleArray(win) { i -> data[start + lag + i].toDouble() }
+                var eSum = 0.0; for (v in eSig) eSum += v * v
+                val eNorm = sqrt(eSum)
+                if (sNorm > 0 && eNorm > 0) {
+                    var dot = 0.0; for (i in 0 until win) dot += sSig[i] * eSig[i]
+                    val ncc = dot / (sNorm * eNorm)
+                    val sim = ncc - (abs(lag - estL).toDouble() / sampleRate) * 0.1
+                    if (sim > maxSim) {
+                        maxSim = sim; bestL = lag
+                    }
+                }
+            }
+        }
+        return bestL
     }
 
     private fun estimateBeatPeriod(flux: DoubleArray, fluxSR: Double): Double {
@@ -146,7 +167,6 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
             }
             return if (cnt > 0) c / cnt else 0.0
         }
-
         val bpb = if (getC((beatP * 3).toInt()) > getC((beatP * 4).toInt()) * 1.1) 3 else 4
         val cands = if (bpb == 3) listOf(3, 6, 9, 12) else listOf(4, 8, 12, 16)
         var bestB = cands[0];
@@ -161,29 +181,6 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
         if (maxS < 0.05) bestB =
             cands.lastOrNull { (beatP * bpb * it) < flux.size * 1.1 } ?: cands[0]
         return Pair(beatP * bpb * bestB, "$bpb/4")
-    }
-
-    private fun findFineLoopPoint(data: ShortArray, start: Int, estL: Int): Int {
-        val range = (sampleRate * 0.15).toInt();
-        val win = (sampleRate * 0.03).toInt()
-        var bestL = estL;
-        var minC = Double.MAX_VALUE
-        val minS = (estL - range).coerceAtLeast(sampleRate / 4)
-        val maxS = (estL + range).coerceAtMost(data.size - start - win)
-        for (lag in minS..maxS) {
-            if (data[start + lag] <= 0 && data[start + lag + 1] > 0) {
-                var mse = 0.0;
-                val eW = win.coerceAtMost(data.size - start - lag)
-                for (i in 0 until eW) mse += (data[start + i].toDouble() - data[start + lag + i].toDouble()).pow(
-                    2
-                )
-                val cost = (mse / eW) + (abs(lag - estL).toDouble() / sampleRate) * 50000.0
-                if (cost < minC) {
-                    minC = cost; bestL = lag
-                }
-            }
-        }
-        return bestL
     }
 
     fun getSpectrogram(
