@@ -1,11 +1,13 @@
 package com.wkonda.cubesuite.looper.data
 
+import com.wkonda.cubesuite.looper.audio.LooperConfig
+
 data class LoopMetadata(
     val id: String,
-    var name: String,
+    val name: String,
     val fileName: String,
-    var startSample: Int,
-    var endSample: Int,
+    val startSample: Int,
+    val endSample: Int,
     val totalSamples: Int,
-    val sampleRate: Int = 44100
+    val sampleRate: Int = LooperConfig.SAMPLE_RATE
 )

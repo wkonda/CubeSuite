@@ -1,6 +1,7 @@
 package com.wkonda.cubesuite.looper.data
 
 import android.content.Context
+import com.wkonda.cubesuite.looper.audio.LooperConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -11,73 +12,73 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class LoopRepository(private val context: Context) {
-    private val loopsDir = File(context.filesDir, "loops").apply { mkdirs() }
-    private val manifestFile = File(loopsDir, "manifest.json")
+class LoopRepository(context: Context) {
+    private val dir = File(context.filesDir, "loops").apply { mkdirs() }
+    private val manifest = File(dir, "manifest.json")
 
-    suspend fun saveLoop(name: String, data: ShortArray, start: Int, end: Int): LoopMetadata =
+    suspend fun saveLoop(name: String, data: ShortArray, start: Int, end: Int) =
         withContext(Dispatchers.IO) {
             val id = System.currentTimeMillis().toString()
-            val fileName = "$id.pcm"
-            val file = File(loopsDir, fileName)
-
+            val file = File(dir, "$id.pcm")
             FileOutputStream(file).use { fos ->
-                val buffer = ByteBuffer.allocate(data.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-                for (s in data) buffer.putShort(s)
-                fos.write(buffer.array())
-            }
-
-            val metadata = LoopMetadata(id, name, fileName, start, end, data.size)
-            saveManifest(getAllLoops() + metadata)
-            metadata
+                val buf = ByteBuffer.allocate(data.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                data.forEach { buf.putShort(it) }
+                fos.write(buf.array())
+        }
+            val meta =
+                LoopMetadata(id, name, file.name, start, end, data.size, LooperConfig.SAMPLE_RATE)
+            saveManifest(getAllLoops() + meta)
+            meta
         }
 
     suspend fun getAllLoops(): List<LoopMetadata> = withContext(Dispatchers.IO) {
-        if (!manifestFile.exists()) return@withContext emptyList()
-        val array = JSONArray(manifestFile.readText())
-        List(array.length()) { i ->
-            val obj = array.getJSONObject(i)
+        if (!manifest.exists()) return@withContext emptyList()
+        val arr = JSONArray(manifest.readText())
+        List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
             LoopMetadata(
-                obj.getString("id"),
-                obj.getString("name"),
-                obj.getString("fileName"),
-                obj.getInt("startSample"),
-                obj.getInt("endSample"),
-                obj.getInt("totalSamples")
+                o.getString("id"),
+                o.getString("name"),
+                o.getString("file"),
+                o.getInt("start"),
+                o.getInt("end"),
+                o.getInt("total"),
+                o.optInt("rate", LooperConfig.SAMPLE_RATE)
             )
         }
     }
 
-    suspend fun loadLoopData(metadata: LoopMetadata): ShortArray = withContext(Dispatchers.IO) {
-        val file = File(loopsDir, metadata.fileName)
+    suspend fun loadLoopData(meta: LoopMetadata) = withContext(Dispatchers.IO) {
+        val file = File(dir, meta.fileName)
         val bytes = ByteArray(file.length().toInt())
         FileInputStream(file).use { it.read(bytes) }
-        ShortArray(bytes.size / 2).also { shorts ->
-            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
+        ShortArray(bytes.size / 2).also {
+            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(it)
         }
     }
 
-    suspend fun deleteLoop(metadata: LoopMetadata) = withContext(Dispatchers.IO) {
-        File(loopsDir, metadata.fileName).delete()
-        saveManifest(getAllLoops().filter { it.id != metadata.id })
+    suspend fun deleteLoop(meta: LoopMetadata) = withContext(Dispatchers.IO) {
+        File(dir, meta.fileName).delete()
+        saveManifest(getAllLoops().filter { it.id != meta.id })
     }
 
-    suspend fun updateLoop(metadata: LoopMetadata) = withContext(Dispatchers.IO) {
-        saveManifest(getAllLoops().map { if (it.id == metadata.id) metadata else it })
+    suspend fun updateLoop(meta: LoopMetadata) = withContext(Dispatchers.IO) {
+        saveManifest(getAllLoops().map { if (it.id == meta.id) meta else it })
     }
 
     private fun saveManifest(loops: List<LoopMetadata>) {
-        val array = JSONArray()
+        val arr = JSONArray()
         loops.forEach {
-            array.put(JSONObject().apply {
-                put("id", it.id)
-                put("name", it.name)
-                put("fileName", it.fileName)
-                put("startSample", it.startSample)
-                put("endSample", it.endSample)
-                put("totalSamples", it.totalSamples)
+            arr.put(JSONObject().apply {
+                put("id", it.id); put(
+                "name",
+                it.name
+            ); put("file", it.fileName); put("start", it.startSample); put(
+                "end",
+                it.endSample
+            ); put("total", it.totalSamples); put("rate", it.sampleRate)
             })
         }
-        manifestFile.writeText(array.toString())
+        manifest.writeText(arr.toString())
     }
 }

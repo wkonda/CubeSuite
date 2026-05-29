@@ -26,11 +26,11 @@ import com.wkonda.cubesuite.ui.theme.TextGrayBox
 @Composable
 fun LoopListScreen(
     loops: List<LoopMetadata>,
-    onLoopSelected: (LoopMetadata) -> Unit,
-    onDeleteLoop: (LoopMetadata) -> Unit
+    onSelect: (LoopMetadata) -> Unit,
+    onDelete: (LoopMetadata) -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
             .background(AppDarkBackground)
             .padding(16.dp),
@@ -38,10 +38,10 @@ fun LoopListScreen(
     ) {
         items(loops) { loop ->
             Row(
-                modifier = Modifier
+                Modifier
                     .fillMaxWidth()
                     .background(TextGrayBox)
-                    .clickable { onLoopSelected(loop) }
+                    .clickable { onSelect(loop) }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -59,10 +59,9 @@ fun LoopListScreen(
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
-
                 Text(
                     "DELETE",
-                    modifier = Modifier.clickable { onDeleteLoop(loop) },
+                    Modifier.clickable { onDelete(loop) },
                     color = ModTrackRed,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold

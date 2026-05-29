@@ -1,6 +1,7 @@
 package com.wkonda.cubesuite.looper.audio
 
 import android.annotation.SuppressLint
+import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
@@ -11,142 +12,80 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 class LooperEngine {
-    private val sampleRate = 48000
-    private val channelConfig = AudioFormat.CHANNEL_IN_MONO
-    private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+    private val sR = LooperConfig.SAMPLE_RATE
+    private val enc = AudioFormat.ENCODING_PCM_16BIT
+    private val bS = AudioRecord.getMinBufferSize(sR, AudioFormat.CHANNEL_IN_MONO, enc)
 
-    private var audioRecord: AudioRecord? = null
-    private var audioTrack: AudioTrack? = null
+    private var rec: AudioRecord? = null
+    private var track: AudioTrack? = null
+    private var isR = false
 
-    private var isRecording = false
-    private var isPlaying = false
+    private val _data = MutableStateFlow<ShortArray?>(null)
+    val recordingData: StateFlow<ShortArray?> = _data
 
-    private val _recordingData = MutableStateFlow<ShortArray?>(null)
-    val recordingData: StateFlow<ShortArray?> = _recordingData
+    private val _pos = MutableStateFlow(0)
+    val playbackPosition: StateFlow<Int> = _pos
 
-    private val _playbackPosition = MutableStateFlow(0)
-    val playbackPosition: StateFlow<Int> = _playbackPosition
-
-    private var currentData: ShortArray? = null
-    private var startSample = 0
-    private var endSample = 0
+    private var curD: ShortArray? = null
+    private var sS = 0;
+    var eS = 0
 
     @SuppressLint("MissingPermission")
     suspend fun startRecording() = withContext(Dispatchers.IO) {
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            channelConfig,
-            audioFormat,
-            bufferSize
-        )
-
-        val dataList = mutableListOf<Short>()
-        val buffer = ShortArray(bufferSize)
-
-        audioRecord?.startRecording()
-        isRecording = true
-
-        while (isRecording) {
-            val read = audioRecord?.read(buffer, 0, bufferSize) ?: 0
-            if (read > 0) {
-                for (i in 0 until read) {
-                    dataList.add((buffer[i] * 3).toShort())
-                }
-            }
+        rec = AudioRecord(MediaRecorder.AudioSource.MIC, sR, AudioFormat.CHANNEL_IN_MONO, enc, bS)
+        val list = mutableListOf<Short>();
+        val buf = ShortArray(bS)
+        rec?.startRecording(); isR = true
+        while (isR) {
+            val r = rec?.read(buf, 0, bS) ?: 0
+            if (r > 0) for (i in 0 until r) list.add((buf[i] * 3).toShort())
         }
-
-        audioRecord?.stop()
-        audioRecord?.release()
-        audioRecord = null
-
-        currentData = dataList.toShortArray()
-        startSample = 0
-        endSample = currentData?.size ?: 0
-        _recordingData.value = currentData
+        rec?.stop(); rec?.release(); rec = null
+        curD = list.toShortArray(); sS = 0; eS = curD?.size ?: 0; _data.value = curD
     }
 
     fun stopRecording() {
-        isRecording = false
+        isR = false
     }
 
-    fun setLoopPoints(start: Int, end: Int) {
-        startSample = start
-        endSample = end
+    fun setLoopPoints(s: Int, e: Int) {
+        sS = s; eS = e
     }
 
     suspend fun startPlayback() = withContext(Dispatchers.IO) {
-        val data = currentData ?: return@withContext
-        if (startSample >= endSample || endSample > data.size) return@withContext
-
-        val loopLength = endSample - startSample
-        val crossfadeLen =
-            (sampleRate * 0.005).toInt().coerceAtMost(loopLength / 4) // 5ms crossfade
-
-        // Create a copy of the loop data to apply crossfade for seamless looping
-        val loopBuffer = ShortArray(loopLength)
-        System.arraycopy(data, startSample, loopBuffer, 0, loopLength)
-
-        // Apply crossfade: blend the beginning of the loop into the end
-        for (i in 0 until crossfadeLen) {
-            val ratio = i.toDouble() / crossfadeLen
-            val endIdx = loopLength - crossfadeLen + i
-            val startIdx = i
-
-            val startSampleVal = loopBuffer[startIdx].toDouble()
-            val endSampleVal = loopBuffer[endIdx].toDouble()
-
-            // Result = End * (1-ratio) + Start * ratio
-            val blended = (endSampleVal * (1.0 - ratio) + startSampleVal * ratio).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            loopBuffer[endIdx] = blended.toShort()
+        val d = curD ?: return@withContext
+        if (sS >= eS || eS > d.size) return@withContext
+        val len = eS - sS;
+        val xL = (sR * LooperConfig.CROSSFADE_MS / 1000).coerceAtMost(len / 4)
+        val buf = ShortArray(len); System.arraycopy(d, sS, buf, 0, len)
+        for (i in 0 until xL) {
+            val r = i.toDouble() / xL;
+            val eI = len - xL + i
+            buf[eI] = (buf[eI] * (1.0 - r) + buf[i] * r).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
-
-        audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-                android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
+        track = AudioTrack.Builder().setAudioAttributes(
+            AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
+        )
             .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(audioFormat)
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
+                AudioFormat.Builder().setEncoding(enc).setSampleRate(sR)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
             )
-            .setBufferSizeInBytes(loopLength * 2)
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .build()
-
-        audioTrack?.write(loopBuffer, 0, loopLength)
-        audioTrack?.setLoopPoints(0, loopLength, -1)
-        audioTrack?.play()
-        isPlaying = true
+            .setBufferSizeInBytes(len * 2).setTransferMode(AudioTrack.MODE_STATIC).build()
+        track?.write(buf, 0, len); track?.setLoopPoints(0, len, -1); track?.play()
     }
 
     fun stopPlayback() {
-        isPlaying = false
-        audioTrack?.stop()
-        audioTrack?.release()
-        audioTrack = null
-        _playbackPosition.value = 0
+        track?.stop(); track?.release(); track = null; _pos.value = 0
     }
 
-    fun getPlaybackHeadPosition(): Int {
-        return (audioTrack?.playbackHeadPosition ?: 0)
+    fun getPlaybackHeadPosition() = track?.playbackHeadPosition ?: 0
+    fun updatePlaybackPosition(p: Int) {
+        _pos.value = p
     }
 
-    fun updatePlaybackPosition(pos: Int) {
-        _playbackPosition.value = pos
-    }
-
-    fun loadData(data: ShortArray, start: Int, end: Int) {
-        currentData = data
-        startSample = start
-        endSample = end
-        _recordingData.value = data
+    fun loadData(d: ShortArray, s: Int, e: Int) {
+        curD = d; sS = s; eS = e; _data.value = d
     }
 }

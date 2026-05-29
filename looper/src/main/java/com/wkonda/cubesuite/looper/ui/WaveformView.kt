@@ -44,9 +44,7 @@ fun WaveformView(
     var handle by remember { mutableStateOf<Int?>(null) }
     var lStart by remember { mutableIntStateOf(start) }
     var lEnd by remember { mutableIntStateOf(end) }
-
     LaunchedEffect(start, end) { lStart = start; lEnd = end }
-
     Box(Modifier
         .fillMaxSize()
         .background(AppDarkBackground)
@@ -56,11 +54,10 @@ fun WaveformView(
             if (w <= 0 || h <= 0) onDrawBehind {} else {
                 val bitmap = ImageBitmap(w.toInt(), h.toInt())
                 CanvasDrawScope().draw(this, this.layoutDirection, Canvas(bitmap), this.size) {
-                    val midY = h / 2
+                    val midY = h / 2;
                     val step = max(1, (data.size / w).toInt())
                     for (i in 0 until w.toInt()) {
-                        val idx = i * step
-                        if (idx >= data.size) break
+                        val idx = i * step; if (idx >= data.size) break
                         val lh = (data[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
                         drawLine(
                             CyanAccent.copy(0.4f),

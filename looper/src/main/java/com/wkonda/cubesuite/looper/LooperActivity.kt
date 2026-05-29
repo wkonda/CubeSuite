@@ -27,15 +27,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,10 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
-import androidx.lifecycle.lifecycleScope
-import com.wkonda.cubesuite.looper.audio.AudioAnalyzer
 import com.wkonda.cubesuite.looper.audio.LooperEngine
-import com.wkonda.cubesuite.looper.data.LoopMetadata
 import com.wkonda.cubesuite.looper.data.LoopRepository
 import com.wkonda.cubesuite.looper.ui.FFTVisualizer
 import com.wkonda.cubesuite.looper.ui.LoopListScreen
@@ -57,61 +47,19 @@ import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
 import com.wkonda.cubesuite.ui.theme.TextGrayBox
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.util.Locale
 
 class LooperActivity : ComponentActivity() {
-    private val engine = LooperEngine()
-    private val repo by lazy { LoopRepository(this) }
-
+    private val vm by lazy { LooperViewModel(LooperEngine(), LoopRepository(this)) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
         setContent {
             CubeSuiteTheme {
+                val s by vm.uiState.collectAsState()
                 Surface(color = AppDarkBackground, modifier = Modifier.fillMaxSize()) {
-                    var screen by remember { mutableStateOf("looper") }
-                    var active by remember { mutableStateOf<LoopMetadata?>(null) }
-                    if (screen == "looper") {
-                        LooperScreen(engine, repo, active, { screen = "library" }, { active = it })
-                    } else {
-                        var loops by remember { mutableStateOf(emptyList<LoopMetadata>()) }
-                        LaunchedEffect(Unit) { loops = repo.getAllLoops() }
-                        Column(Modifier
-                            .fillMaxSize()
-                            .background(AppDarkBackground)) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                Arrangement.SpaceBetween,
-                                Alignment.CenterVertically
-                            ) {
-                                Text("LIBRARY", color = CyanAccent, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "CLOSE",
-                                    color = Color.Gray,
-                                    modifier = Modifier.clickable { screen = "looper" })
-                            }
-                            LoopListScreen(loops, { loop ->
-                                lifecycleScope.launch {
-                                    engine.loadData(
-                                        repo.loadLoopData(loop),
-                                        loop.startSample,
-                                        loop.endSample
-                                    )
-                                    active = loop; screen = "looper"
-                                }
-                            }, { loop ->
-                                lifecycleScope.launch {
-                                    repo.deleteLoop(loop)
-                                    if (active?.id == loop.id) active = null; loops =
-                                    repo.getAllLoops()
-                                }
-                            })
-                        }
-                    }
+                    if (s.screen == "looper") LooperScreen(s, vm)
+                    else LibraryScreen(s, vm)
                 }
             }
         }
@@ -119,39 +67,7 @@ class LooperActivity : ComponentActivity() {
 }
 
 @Composable
-fun LooperScreen(
-    engine: LooperEngine,
-    repo: LoopRepository,
-    loaded: LoopMetadata?,
-    onLib: () -> Unit,
-    onSave: (LoopMetadata?) -> Unit
-) {
-    val data by engine.recordingData.collectAsState()
-    val pos by engine.playbackPosition.collectAsState()
-    var isRec by remember { mutableStateOf(false) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var start by remember { mutableIntStateOf(0) }
-    var end by remember { mutableIntStateOf(0) }
-    var bpm by remember { mutableDoubleStateOf(0.0) }
-    var sig by remember { mutableStateOf("4/4") }
-    var spec by remember { mutableStateOf(emptyList<List<Double>>()) }
-    var showSpec by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("New Loop") }
-    var showSave by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val analyzer = remember { AudioAnalyzer() }
-
-    LaunchedEffect(data) {
-        data?.let {
-            if (loaded != null) {
-                start = loaded.startSample; end = loaded.endSample; showSpec = false
-            } else {
-                start = 0; end = it.size; showSpec = false
-            }
-            spec = analyzer.getSpectrogram(it, 82.41f, 329.63f, 400, 24)
-        }
-    }
-
+fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
     Column(Modifier
         .fillMaxSize()
         .background(AppDarkBackground)
@@ -159,14 +75,20 @@ fun LooperScreen(
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
-                if (bpm > 0) Text(
-                    "  |  ${String.format(Locale.US, "%.1f", bpm)} BPM ($sig)",
+                if (s.bpm > 0) Text(
+                    "  |  ${
+                        String.format(
+                            Locale.US,
+                            "%.1f",
+                            s.bpm
+                        )
+                    } BPM (${s.timeSignature})",
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
             Button(
-                onLib,
+                { vm.setScreen("library") },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TextGrayBox,
                     contentColor = CyanAccent
@@ -185,108 +107,103 @@ fun LooperScreen(
                 .border(1.dp, TextGrayBox, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
         ) {
-            if (showSpec) FFTVisualizer(
-                spec,
-                data?.size ?: 0,
-                start,
-                end,
-                { start = it },
-                { end = it },
+            if (s.showSpectrogram) FFTVisualizer(
+                s.spectrogram,
+                s.recordingData?.size ?: 0,
+                s.startSample,
+                s.endSample,
+                { vm.updateStart(it) },
+                { vm.updateEnd(it) },
                 Modifier.fillMaxSize(),
-                pos,
-                isPlaying
+                s.playbackPosition,
+                s.isPlaying
             )
-            else WaveformView(data, start, end, { start = it }, { end = it }, pos, isPlaying)
+            else WaveformView(
+                s.recordingData,
+                s.startSample,
+                s.endSample,
+                { vm.updateStart(it) },
+                { vm.updateEnd(it) },
+                s.playbackPosition,
+                s.isPlaying
+            )
         }
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
-            LooperControlButton(if (isRec) "STOP" else "REC", {
-                if (isRec) {
-                    engine.stopRecording(); isRec = false; onSave(null)
-                } else scope.launch {
-                    isRec = true; spec = emptyList(); showSpec = false; engine.startRecording()
-                }
-            }, Modifier.weight(1f), !isPlaying, isRec)
-            LooperControlButton(if (isPlaying) "STOP" else "PLAY", {
-                if (isPlaying) {
-                    engine.stopPlayback(); isPlaying = false
-                } else scope.launch {
-                    engine.setLoopPoints(
-                        start,
-                        end
-                    ); engine.startPlayback(); isPlaying = true
-                }
-            }, Modifier.weight(1f), !isRec, isPlaying)
-            LooperControlButton("ANALYZE", {
-                data?.let {
-                    if (!showSpec) {
-                        val r = analyzer.analyze(it); start = r.startSample; end =
-                            r.endSample; bpm = r.bpm; sig = r.timeSignature; showSpec = true
-                    } else {
-                        val r = analyzer.snapToSeamlessLoop(it, start, end, bpm, sig); start =
-                            r.startSample; end = r.endSample; bpm = r.bpm
-                    }
-                }
-            }, Modifier.weight(1.5f), data != null && !isPlaying && !isRec)
-            LooperControlButton(if (loaded != null) "UPDATE" else "SAVE", {
-                if (loaded != null) scope.launch {
-                    val u = loaded.copy(
-                        startSample = start,
-                        endSample = end
-                    ); repo.updateLoop(u); onSave(u)
-                }
-                else showSave = true
-            }, Modifier.weight(1.5f), data != null && !isPlaying && !isRec)
-            if (data != null) {
+            Btn(
+                if (s.isRecording) "STOP" else "REC",
+                { if (s.isRecording) vm.stopRecording() else vm.startRecording() },
+                Modifier.weight(1f),
+                !s.isPlaying,
+                s.isRecording
+            )
+            Btn(
+                if (s.isPlaying) "STOP" else "PLAY",
+                { vm.togglePlayback() },
+                Modifier.weight(1f),
+                !s.isRecording,
+                s.isPlaying
+            )
+            Btn(
+                "ANALYZE",
+                { vm.analyze() },
+                Modifier.weight(1.5f),
+                (s.recordingData != null && !s.isPlaying && !s.isRecording)
+            )
+            Btn(
+                if (s.activeLoop != null) "UPDATE" else "SAVE",
+                { if (s.activeLoop != null) vm.saveOrUpdate() else vm.showSave() },
+                Modifier.weight(1.5f),
+                (s.recordingData != null && !s.isPlaying && !s.isRecording)
+            )
+            if (s.recordingData != null) {
                 Adj(
                     "S",
-                    start,
-                    { start = it.coerceIn(0, end - 100) },
-                    !isPlaying && !isRec,
+                    s.startSample,
+                    { vm.updateStart(it) },
+                    !s.isPlaying && !s.isRecording,
                     Modifier.weight(2.5f)
                 )
                 Adj(
                     "E",
-                    end,
-                    { end = it.coerceIn(start + 100, data?.size ?: 0) },
-                    !isPlaying && !isRec,
+                    s.endSample,
+                    { vm.updateEnd(it) },
+                    !s.isPlaying && !s.isRecording,
                     Modifier.weight(2.5f)
                 )
             }
         }
     }
-
-    if (showSave) AlertDialog(
-        onDismissRequest = { showSave = false },
-        confirmButton = {
-            Button(onClick = {
-                scope.launch {
-                    data?.let {
-                        onSave(
-                            repo.saveLoop(
-                                name,
-                                it,
-                                start,
-                                end
-                            )
-                        )
-                    }; showSave = false
-                }
-            }) { Text("Save") }
-        },
+    if (s.showSaveDialog) AlertDialog(
+        onDismissRequest = { vm.hideSave() },
+        confirmButton = { Button({ vm.saveOrUpdate() }) { Text("Save") } },
         title = { Text("Save") },
-        text = { TextField(name, { name = it }) })
+        text = { TextField(s.loopName, { vm.updateLoopName(it) }) })
+}
 
-    LaunchedEffect(isPlaying) {
-        if (isPlaying && (end - start) > 0) while (isPlaying) {
-            engine.updatePlaybackPosition(engine.getPlaybackHeadPosition() % (end - start)); delay(
-                16
-            )
+@Composable
+fun LibraryScreen(s: LooperUiState, vm: LooperViewModel) {
+    Column(Modifier
+        .fillMaxSize()
+        .background(AppDarkBackground)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            Arrangement.SpaceBetween,
+            Alignment.CenterVertically
+        ) {
+            Text("LIBRARY", color = CyanAccent, fontWeight = FontWeight.Bold)
+            Text(
+                "CLOSE",
+                color = Color.Gray,
+                modifier = Modifier.clickable { vm.setScreen("looper") })
         }
+        LoopListScreen(s.loops, { vm.loadLoop(it) }) { vm.deleteLoop(it) }
     }
 }
 
 @Composable
-fun LooperControlButton(
+fun Btn(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -299,7 +216,9 @@ fun LooperControlButton(
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (active) ModTrackRed else TextGrayBox,
-            contentColor = if (active) Color.White else CyanAccent
+            contentColor = if (active) Color.White else CyanAccent,
+            disabledContainerColor = TextGrayBox,
+            disabledContentColor = Color.Gray
         ),
         shape = RoundedCornerShape(4.dp),
         contentPadding = PaddingValues(horizontal = 8.dp)

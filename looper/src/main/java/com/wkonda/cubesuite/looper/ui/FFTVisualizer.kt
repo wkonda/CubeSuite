@@ -53,11 +53,10 @@ fun FFTVisualizer(
     val notes = remember {
         val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
         (40..64).map { m ->
-            val b = names[m % 12]
             Triple(
-                b + ((m / 12) - 1),
+                names[m % 12] + ((m / 12) - 1),
                 440f * 2.0.pow((m - 69.0) / 12.0).toFloat(),
-                !b.contains("#")
+                !names[m % 12].contains("#")
             )
         }
     }
