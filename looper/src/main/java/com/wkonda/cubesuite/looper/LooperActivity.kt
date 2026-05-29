@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.core.graphics.toColorInt
 import com.wkonda.cubesuite.looper.audio.LooperEngine
 import com.wkonda.cubesuite.looper.data.LoopRepository
 import com.wkonda.cubesuite.looper.ui.FFTVisualizer
@@ -56,8 +57,11 @@ class LooperActivity : ComponentActivity() {
     private val vm by lazy { LooperViewModel(LooperEngine(), LoopRepository(this)) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.parseColor("#161616")
-        window.navigationBarColor = android.graphics.Color.parseColor("#161616")
+        @Suppress("DEPRECATION")
+        window.apply {
+            statusBarColor = "#161616".toColorInt()
+            navigationBarColor = "#161616".toColorInt()
+        }
 
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
         setContent {
@@ -150,7 +154,8 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 { vm.updateStart(it) },
                 { vm.updateEnd(it) },
                 s.playbackPosition,
-                s.isPlaying
+                s.isPlaying,
+                s.isRecording
             )
         }
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {

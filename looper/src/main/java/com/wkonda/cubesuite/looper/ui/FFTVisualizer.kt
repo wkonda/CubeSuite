@@ -7,11 +7,11 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -28,9 +28,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.wkonda.cubesuite.looper.audio.LooperConfig
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.log2
 import kotlin.math.pow
 
@@ -46,13 +48,13 @@ fun FFTVisualizer(
     pos: Int = 0,
     playing: Boolean = false
 ) {
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    var handle by remember { mutableStateOf<Int?>(null) }
-    var lStart by remember { mutableIntStateOf(start) }
-    var lEnd by remember { mutableIntStateOf(end) }
+    var size by remember { mutableStateOf(IntSize.Zero) };
+    var handle by remember { mutableIntStateOf(-1) }
+    val curS by rememberUpdatedState(start);
+    val curE by rememberUpdatedState(end)
     val notes = remember {
         val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-        (40..64).map { m ->
+        (LooperConfig.MIDI_E2..LooperConfig.MIDI_E4).map { m ->
             Triple(
                 names[m % 12] + ((m / 12) - 1),
                 440f * 2.0.pow((m - 69.0) / 12.0).toFloat(),
@@ -60,8 +62,9 @@ fun FFTVisualizer(
             )
         }
     }
-    LaunchedEffect(start, end) { lStart = start; lEnd = end }
-    val maxM = remember(spec) { spec.flatten().maxOrNull()?.coerceAtLeast(0.01) ?: 1.0 }
+    val maxM = remember(spec) { (spec.flatten().maxOrNull() ?: 1.0).coerceAtLeast(0.001) }
+    val logF = log2(LooperConfig.FREQ_E2.toDouble());
+    val logT = log2(LooperConfig.FREQ_E4.toDouble())
 
     Box(modifier
         .background(AppDarkBackground)
@@ -70,16 +73,23 @@ fun FFTVisualizer(
             val (w, h) = this.size
             if (spec.isEmpty() || w <= 0 || h <= 0) onDrawBehind {} else {
                 val bitmap = ImageBitmap(w.toInt(), h.toInt())
-                CanvasDrawScope().draw(this, this.layoutDirection, Canvas(bitmap), this.size) {
+                CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
                     val cw = w / spec.size;
                     val ch = h / spec[0].size
                     spec.forEachIndexed { t, mags ->
                         mags.forEachIndexed { f, m ->
+                            val intensity =
+                                (log10(m.coerceAtLeast(1e-12) + 1.0) / log10(
+                                    maxM.coerceAtLeast(
+                                        1e-12
+                                    ) + 1.0
+                                )).toFloat()
+                                    .pow(4f).coerceIn(0f, 1f)
                             drawRect(
                                 lerp(
                                     AppDarkBackground,
                                     CyanAccent,
-                                    (m / maxM).coerceIn(0.0, 1.0).toFloat()
+                                    (intensity * 1.5f).coerceIn(0f, 1f)
                                 ), Offset(t * cw, h - (f + 1) * ch), Size(cw + 1f, ch + 1f)
                             )
                         }
@@ -91,64 +101,62 @@ fun FFTVisualizer(
         .pointerInput(total, playing) {
             if (total <= 0 || playing) return@pointerInput
             awaitEachGesture {
-                val down = awaitFirstDown()
-                val w = size.width.toFloat()
-                if (w <= 0) return@awaitEachGesture
-                val sX = lStart.toFloat() * w / total
-                val eX = lEnd.toFloat() * w / total
+                val down = awaitFirstDown();
+                val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
+                val sX = curS.toFloat() * w / total;
+                val eX = curE.toFloat() * w / total
                 handle = when {
-                    abs(down.position.x - sX) < 40.dp.toPx() -> 0
-                    abs(down.position.x - eX) < 40.dp.toPx() -> 1
-                    else -> null
+                    abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
                 }
-                if (handle != null) {
+                if (handle != -1) {
                     while (true) {
-                        val ev = awaitPointerEvent()
+                        val ev = awaitPointerEvent();
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
                         val n = (ch.position.x * total / w).toInt()
-                        if (handle == 0) {
-                            lStart = n.coerceIn(0, lEnd - 100); onStart(lStart)
-                        } else {
-                            lEnd = n.coerceIn(lStart + 100, total); onEnd(lEnd)
-                        }
+                        if (handle == 0) onStart(
+                            n.coerceIn(
+                                0,
+                                curE - 100
+                            )
+                        ) else onEnd(n.coerceIn(curS + 100, total))
                         ch.consume()
                     }
-                    handle = null
+                    handle = -1
                 }
             }
-        }
-    ) {
+        }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
-            val h = size.height.toFloat()
-            if (w <= 0 || h <= 0) return@Canvas
-            val sX = lStart * w / total;
-            val eX = lEnd * w / total
-            if (sX in 0f..w) drawLine(
+            val h = size.height.toFloat(); if (w <= 0 || h <= 0) return@Canvas
+            val sX = curS * w / total;
+            val eX = curE * w / total
+            drawLine(
                 if (handle == 0) Color.White else CyanAccent,
                 Offset(sX, 0f),
                 Offset(sX, h),
                 2.dp.toPx()
             )
-            if (eX in 0f..w) drawLine(
+            drawLine(
                 if (handle == 1) Color.White else CyanAccent,
                 Offset(eX, 0f),
                 Offset(eX, h),
                 2.dp.toPx()
             )
             if (playing) {
-                val cX = (lStart + pos) * w / total
-                if (cX in 0f..w) drawLine(Color.White, Offset(cX, 0f), Offset(cX, h), 1.dp.toPx())
+                val cX = (curS + pos) * w / total; if (cX in 0f..w) drawLine(
+                    Color.White,
+                    Offset(cX, 0f),
+                    Offset(cX, h),
+                    1.dp.toPx()
+                )
             }
-            val logF = log2(82.41f);
-            val logT = log2(329.63f)
             drawIntoCanvas { c ->
                 val p = android.graphics.Paint().apply {
                     color = android.graphics.Color.argb(100, 255, 255, 255); textSize = 24f
                 }
                 notes.forEach { (n, f, white) ->
-                    val y = h - (log2(f) - logF) / (logT - logF) * h
+                    val y = h - ((log2(f.toDouble()) - logF) / (logT - logF) * h).toFloat()
                     if (white) {
                         c.nativeCanvas.drawText(n, 10f, y, p); drawLine(
                             Color.White.copy(0.15f),

@@ -7,11 +7,11 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -37,14 +37,19 @@ fun WaveformView(
     onStart: (Int) -> Unit,
     onEnd: (Int) -> Unit,
     pos: Int = 0,
-    playing: Boolean = false
+    playing: Boolean = false,
+    recording: Boolean = false
 ) {
     if (data == null) return
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    var handle by remember { mutableStateOf<Int?>(null) }
-    var lStart by remember { mutableIntStateOf(start) }
-    var lEnd by remember { mutableIntStateOf(end) }
-    LaunchedEffect(start, end) { lStart = start; lEnd = end }
+    var size by remember { mutableStateOf(IntSize.Zero) };
+    var handle by remember { mutableIntStateOf(-1) }
+    val curS by rememberUpdatedState(start);
+    val curE by rememberUpdatedState(end)
+    val displayData = if (recording && data.size > 480000) data.copyOfRange(
+        data.size - 480000,
+        data.size
+    ) else data
+
     Box(Modifier
         .fillMaxSize()
         .background(AppDarkBackground)
@@ -53,12 +58,12 @@ fun WaveformView(
             val (w, h) = this.size
             if (w <= 0 || h <= 0) onDrawBehind {} else {
                 val bitmap = ImageBitmap(w.toInt(), h.toInt())
-                CanvasDrawScope().draw(this, this.layoutDirection, Canvas(bitmap), this.size) {
+                CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
                     val midY = h / 2;
-                    val step = max(1, (data.size / w).toInt())
+                    val step = max(1, displayData.size / w.toInt())
                     for (i in 0 until w.toInt()) {
-                        val idx = i * step; if (idx >= data.size) break
-                        val lh = (data[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
+                        val idx = i * step; if (idx >= displayData.size) break
+                        val lh = (displayData[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
                         drawLine(
                             CyanAccent.copy(0.4f),
                             Offset(i.toFloat(), midY - lh),
@@ -69,57 +74,58 @@ fun WaveformView(
                 onDrawBehind { drawImage(bitmap) }
             }
         }
-        .pointerInput(data.size, playing) {
-            if (playing) return@pointerInput
+        .pointerInput(data.size, playing, recording) {
+            if (playing || recording) return@pointerInput
             awaitEachGesture {
                 val down = awaitFirstDown();
                 val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
-                val sX = lStart.toFloat() * w / data.size;
-                val eX = lEnd.toFloat() * w / data.size
+                val sX = curS.toFloat() * w / data.size;
+                val eX = curE.toFloat() * w / data.size
                 handle = when {
-                    abs(down.position.x - sX) < 40.dp.toPx() -> 0
-                    abs(down.position.x - eX) < 40.dp.toPx() -> 1
-                    else -> null
+                    abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
                 }
-                if (handle != null) {
+                if (handle != -1) {
                     while (true) {
                         val ev = awaitPointerEvent();
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
                         val n = (ch.position.x * data.size / w).toInt()
-                        if (handle == 0) {
-                            lStart = n.coerceIn(0, lEnd - 100); onStart(lStart)
-                        } else {
-                            lEnd = n.coerceIn(lStart + 100, data.size); onEnd(lEnd)
-                        }
+                        if (handle == 0) onStart(
+                            n.coerceIn(
+                                0,
+                                curE - 100
+                            )
+                        ) else onEnd(n.coerceIn(curS + 100, data.size))
                         ch.consume()
                     }
-                    handle = null
+                    handle = -1
                 }
             }
-        }
-    ) {
+        }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
-            val h = size.height.toFloat()
-            if (w <= 0 || h <= 0) return@Canvas
-            val sX = lStart * w / data.size;
-            val eX = lEnd * w / data.size
-            if (sX in 0f..w) drawLine(
+            val h = size.height.toFloat(); if (w <= 0 || h <= 0 || recording) return@Canvas
+            val sX = curS * w / data.size;
+            val eX = curE * w / data.size
+            drawLine(
                 if (handle == 0) Color.White else CyanAccent,
                 Offset(sX, 0f),
                 Offset(sX, h),
                 2.dp.toPx()
             )
-            if (eX in 0f..w) drawLine(
+            drawLine(
                 if (handle == 1) Color.White else CyanAccent,
                 Offset(eX, 0f),
                 Offset(eX, h),
                 2.dp.toPx()
             )
             if (playing) {
-                val cX = (lStart + pos) * w / data.size
-                if (cX in 0f..w) drawLine(Color.White, Offset(cX, 0f), Offset(cX, h), 1.dp.toPx())
+                val cX = (curS + pos) * w / data.size; if (cX in 0f..w) drawLine(
+                    Color.White,
+                    Offset(cX, 0f),
+                    Offset(cX, h),
+                    1.dp.toPx()
+                )
             }
         }
     }

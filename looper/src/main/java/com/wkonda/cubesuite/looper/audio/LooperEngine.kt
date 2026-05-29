@@ -27,18 +27,26 @@ class LooperEngine {
     val playbackPosition: StateFlow<Int> = _pos
 
     private var curD: ShortArray? = null
-    private var sS = 0;
+    private var sS = 0
     var eS = 0
 
     @SuppressLint("MissingPermission")
     suspend fun startRecording() = withContext(Dispatchers.IO) {
         rec = AudioRecord(MediaRecorder.AudioSource.MIC, sR, AudioFormat.CHANNEL_IN_MONO, enc, bS)
-        val list = mutableListOf<Short>();
+        val list = ArrayList<Short>(sR * 10)
         val buf = ShortArray(bS)
         rec?.startRecording(); isR = true
+        var lastUpdate = 0L
         while (isR) {
             val r = rec?.read(buf, 0, bS) ?: 0
-            if (r > 0) for (i in 0 until r) list.add((buf[i] * 3).toShort())
+            if (r > 0) {
+                for (i in 0 until r) list.add((buf[i].toInt() shl 1).toShort()) // Boost x2 using shift
+                val now = System.currentTimeMillis()
+                if (now - lastUpdate > 100) {
+                    _data.value = list.toShortArray()
+                    lastUpdate = now
+                }
+            }
         }
         rec?.stop(); rec?.release(); rec = null
         curD = list.toShortArray(); sS = 0; eS = curD?.size ?: 0; _data.value = curD
