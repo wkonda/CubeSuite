@@ -20,10 +20,13 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.wkonda.cubesuite.looper.audio.ChordRegion
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import kotlin.math.abs
@@ -38,17 +41,21 @@ fun WaveformView(
     onEnd: (Int) -> Unit,
     pos: Int = 0,
     playing: Boolean = false,
-    recording: Boolean = false
+    recording: Boolean = false,
+    onsets: List<Int> = emptyList(),
+    beatGrid: List<Int> = emptyList(),
+    chords: List<ChordRegion> = emptyList(),
+    correlationCurve: List<Pair<Int, Double>> = emptyList()
 ) {
     if (data == null) return
     var size by remember { mutableStateOf(IntSize.Zero) };
     var handle by remember { mutableIntStateOf(-1) }
     val curS by rememberUpdatedState(start);
     val curE by rememberUpdatedState(end)
-    val displayData = if (recording && data.size > 480000) data.copyOfRange(
-        data.size - 480000,
-        data.size
-    ) else data
+    val displayData = if (recording) {
+        val windowSize = 5 * 48000 // 5 seconds
+        if (data.size > windowSize) data.copyOfRange(data.size - windowSize, data.size) else data
+    } else data
 
     Box(Modifier
         .fillMaxSize()
@@ -107,24 +114,79 @@ fun WaveformView(
             val h = size.height.toFloat(); if (w <= 0 || h <= 0 || recording) return@Canvas
             val sX = curS * w / data.size;
             val eX = curE * w / data.size
+
+            val darkRed = Color(0xFF8B0000)
+
+            // Boundaries
             drawLine(
-                if (handle == 0) Color.White else CyanAccent,
+                if (handle == 0) Color.White else darkRed,
                 Offset(sX, 0f),
                 Offset(sX, h),
-                2.dp.toPx()
+                2.5.dp.toPx()
             )
             drawLine(
-                if (handle == 1) Color.White else CyanAccent,
+                if (handle == 1) Color.White else darkRed,
                 Offset(eX, 0f),
                 Offset(eX, h),
-                2.dp.toPx()
+                2.5.dp.toPx()
             )
+
             if (playing) {
                 val cX = (curS + pos) * w / data.size; if (cX in 0f..w) drawLine(
                     Color.White,
                     Offset(cX, 0f),
                     Offset(cX, h),
                     1.dp.toPx()
+                )
+            }
+
+            // Beats
+            beatGrid.forEach { b ->
+                val bX = b * w / data.size
+                if (bX in 0f..w) drawLine(
+                    darkRed.copy(0.6f),
+                    Offset(bX, 0f),
+                    Offset(bX, h),
+                    1.dp.toPx()
+                )
+            }
+
+            chords.forEach { c ->
+                val cX = c.startSample * w / data.size
+                if (cX in 0f..w) {
+                    drawIntoCanvas { canvas ->
+                        val p = android.graphics.Paint().apply {
+                            color = android.graphics.Color.WHITE
+                            textSize = 32f
+                            isFakeBoldText = true
+                        }
+                        canvas.nativeCanvas.drawText(c.label, cX + 8f, 40f, p)
+                    }
+                }
+            }
+
+            // Correlation Curve
+            if (correlationCurve.isNotEmpty()) {
+                val path = androidx.compose.ui.graphics.Path()
+                val minSim = correlationCurve.minOf { it.second }.toFloat()
+                val maxSim = correlationCurve.maxOf { it.second }.toFloat()
+                val range = (maxSim - minSim).coerceAtLeast(0.01f)
+
+                correlationCurve.forEachIndexed { i, p ->
+                    val x = p.first.toFloat() * w / data.size
+                    val sim = p.second.toFloat()
+                    // Normalize between min and max to take full height
+                    val normY = (sim - minSim) / range
+                    val y = h - (normY * h)
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path = path,
+                    color = Color.Yellow,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = 1.dp.toPx(), // Fine line (1px equivalent)
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(4.dp.toPx())
+                    )
                 )
             }
         }

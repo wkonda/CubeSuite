@@ -23,6 +23,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,6 +33,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,6 +83,10 @@ class LooperActivity : ComponentActivity() {
 
 @Composable
 fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
+    var sigMenuExpanded by remember { mutableStateOf(false) }
+    var barsMenuExpanded by remember { mutableStateOf(false) }
+    val sigs = listOf(4 to 4, 3 to 4, 6 to 8, 2 to 4, 5 to 4)
+
     Column(Modifier
         .fillMaxSize()
         .background(AppDarkBackground)
@@ -85,17 +94,84 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
-                if (s.bpm != null && s.bpm > 0) Text(
-                    "  |  ${
-                        String.format(
-                            Locale.US,
-                            "%.1f",
-                            s.bpm
+                val currentBpm = s.bpm
+                if (currentBpm != null && currentBpm > 0) {
+                    Text(
+                        "  |  ${String.format(Locale.US, "%.1f", currentBpm)} BPM",
+                        color = if (s.isRecording) ModTrackRed else Color.Gray,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (s.isRecording) FontWeight.Bold else FontWeight.Normal
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "  |  ",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodySmall
                         )
-                    } BPM (${s.timeSignature})",
-                    color = Color.Gray,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                        Box {
+                            Text(
+                                text = "${s.currentBars} bars",
+                                color = if (s.userBars != null) CyanAccent else Color.Gray,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.clickable { barsMenuExpanded = true }
+                            )
+                            DropdownMenu(
+                                expanded = barsMenuExpanded,
+                                onDismissRequest = { barsMenuExpanded = false },
+                                modifier = Modifier.background(TextGrayBox)
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "AUTO (${s.suggestedBars})",
+                                            color = CyanAccent
+                                        )
+                                    },
+                                    onClick = { vm.setUserBars(null); barsMenuExpanded = false }
+                                )
+                                (1..16).forEach { b ->
+                                    DropdownMenuItem(
+                                        text = { Text("$b bars", color = CyanAccent) },
+                                        onClick = { vm.setUserBars(b); barsMenuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                        Text(" of ", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        Box {
+                            Text(
+                                text = "${s.currentSignature.first}/${s.currentSignature.second}",
+                                color = if (s.userSignature != null) CyanAccent else Color.Gray,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.clickable { sigMenuExpanded = true }
+                            )
+                            DropdownMenu(
+                                expanded = sigMenuExpanded,
+                                onDismissRequest = { sigMenuExpanded = false },
+                                modifier = Modifier.background(TextGrayBox)
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "AUTO (${s.suggestedSignature.first}/${s.suggestedSignature.second})",
+                                            color = CyanAccent
+                                        )
+                                    },
+                                    onClick = { vm.clearUserSignature(); sigMenuExpanded = false }
+                                )
+                                sigs.forEach { (n, d) ->
+                                    DropdownMenuItem(
+                                        text = { Text("$n/$d", color = CyanAccent) },
+                                        onClick = {
+                                            vm.setUserSignature(n, d); sigMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -145,7 +221,11 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 { vm.updateEnd(it) },
                 Modifier.fillMaxSize(),
                 s.playbackPosition,
-                s.isPlaying
+                s.isPlaying,
+                s.onsets,
+                s.beatGrid,
+                s.chords,
+                s.correlationCurve
             )
             else WaveformView(
                 s.recordingData,
@@ -155,7 +235,11 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 { vm.updateEnd(it) },
                 s.playbackPosition,
                 s.isPlaying,
-                s.isRecording
+                s.isRecording,
+                s.onsets,
+                s.beatGrid,
+                s.chords,
+                s.correlationCurve
             )
         }
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {

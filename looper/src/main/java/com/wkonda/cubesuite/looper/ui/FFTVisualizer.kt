@@ -28,12 +28,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.wkonda.cubesuite.looper.audio.LooperConfig
+import com.wkonda.cubesuite.looper.audio.ChordRegion
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import kotlin.math.abs
-import kotlin.math.log10
-import kotlin.math.log2
 import kotlin.math.pow
 
 @Composable
@@ -46,25 +44,23 @@ fun FFTVisualizer(
     onEnd: (Int) -> Unit,
     modifier: Modifier = Modifier,
     pos: Int = 0,
-    playing: Boolean = false
+    playing: Boolean = false,
+    onsets: List<Int> = emptyList(),
+    beatGrid: List<Int> = emptyList(),
+    chords: List<ChordRegion> = emptyList(),
+    correlationCurve: List<Pair<Int, Double>> = emptyList()
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) };
     var handle by remember { mutableIntStateOf(-1) }
     val curS by rememberUpdatedState(start);
     val curE by rememberUpdatedState(end)
+
     val notes = remember {
         val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-        (LooperConfig.MIDI_E2..LooperConfig.MIDI_E4).map { m ->
-            Triple(
-                names[m % 12] + ((m / 12) - 1),
-                440f * 2.0.pow((m - 69.0) / 12.0).toFloat(),
-                !names[m % 12].contains("#")
-            )
+        (40..64).map { m ->
+            Triple(names[m % 12] + ((m / 12) - 1), 0f, !names[m % 12].contains("#"))
         }
     }
-    val maxM = remember(spec) { (spec.flatten().maxOrNull() ?: 1.0).coerceAtLeast(0.001) }
-    val logF = log2(LooperConfig.FREQ_E2.toDouble());
-    val logT = log2(LooperConfig.FREQ_E4.toDouble())
 
     Box(modifier
         .background(AppDarkBackground)
@@ -76,22 +72,25 @@ fun FFTVisualizer(
                 CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
                     val cw = w / spec.size;
                     val ch = h / spec[0].size
+
                     spec.forEachIndexed { t, mags ->
+                        // Magnitudes are in dB (e.g. -20 to -100)
+                        val colMax = mags.maxOrNull() ?: -100.0
+                        // Focus on significant notes: dynamic range of 35dB from peak
+                        val floor = colMax - 35.0
+
                         mags.forEachIndexed { f, m ->
-                            val intensity =
-                                (log10(m.coerceAtLeast(1e-12) + 1.0) / log10(
-                                    maxM.coerceAtLeast(
-                                        1e-12
-                                    ) + 1.0
-                                )).toFloat()
-                                    .pow(4f).coerceIn(0f, 1f)
-                            drawRect(
-                                lerp(
-                                    AppDarkBackground,
-                                    CyanAccent,
-                                    (intensity * 1.5f).coerceIn(0f, 1f)
-                                ), Offset(t * cw, h - (f + 1) * ch), Size(cw + 1f, ch + 1f)
-                            )
+                            // Scale dB to 0..1 intensity
+                            val intensity = ((m - floor) / 35.0).toFloat().coerceIn(0f, 1f)
+
+                            // Only draw if it's not silence/background noise
+                            if (intensity > 0.05f && m > -90.0) {
+                                drawRect(
+                                    lerp(AppDarkBackground, CyanAccent, intensity.pow(1.5f)),
+                                    Offset(t * w / 600f, h - (f + 1) * ch),
+                                    Size(w / 600f + 1f, ch + 1f)
+                                )
+                            }
                         }
                     }
                 }
@@ -114,12 +113,12 @@ fun FFTVisualizer(
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
                         val n = (ch.position.x * total / w).toInt()
-                        if (handle == 0) onStart(
+                        if (handle == 0) onStart(n.coerceIn(0, curE - 100)) else onEnd(
                             n.coerceIn(
-                                0,
-                                curE - 100
+                                curS + 100,
+                                total
                             )
-                        ) else onEnd(n.coerceIn(curS + 100, total))
+                        )
                         ch.consume()
                     }
                     handle = -1
@@ -128,20 +127,24 @@ fun FFTVisualizer(
         }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
-            val h = size.height.toFloat(); if (w <= 0 || h <= 0) return@Canvas
+            val h = size.height.toFloat()
+            if (w <= 0 || h <= 0) return@Canvas
             val sX = curS * w / total;
             val eX = curE * w / total
+
+            val darkRed = Color(0xFF8B0000)
+
             drawLine(
-                if (handle == 0) Color.White else CyanAccent,
+                if (handle == 0) Color.White else darkRed,
                 Offset(sX, 0f),
                 Offset(sX, h),
-                2.dp.toPx()
+                2.5.dp.toPx()
             )
             drawLine(
-                if (handle == 1) Color.White else CyanAccent,
+                if (handle == 1) Color.White else darkRed,
                 Offset(eX, 0f),
                 Offset(eX, h),
-                2.dp.toPx()
+                2.5.dp.toPx()
             )
             if (playing) {
                 val cX = (curS + pos) * w / total; if (cX in 0f..w) drawLine(
@@ -151,19 +154,64 @@ fun FFTVisualizer(
                     1.dp.toPx()
                 )
             }
+            beatGrid.forEach { b ->
+                val bX = b * w / total
+                if (bX in 0f..w) drawLine(
+                    darkRed.copy(0.6f),
+                    Offset(bX, 0f),
+                    Offset(bX, h),
+                    1.dp.toPx()
+                )
+            }
+
+            if (correlationCurve.isNotEmpty()) {
+                val path = androidx.compose.ui.graphics.Path()
+                val minSim = correlationCurve.minOf { it.second }.toFloat()
+                val maxSim = correlationCurve.maxOf { it.second }.toFloat()
+                val range = (maxSim - minSim).coerceAtLeast(0.01f)
+                correlationCurve.forEachIndexed { i, p ->
+                    val x = p.first.toFloat() * w / total
+                    val sim = p.second.toFloat()
+                    val normY = (sim - minSim) / range
+                    val y = h - (normY * h)
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path,
+                    Color.Yellow,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+            }
+
             drawIntoCanvas { c ->
                 val p = android.graphics.Paint().apply {
-                    color = android.graphics.Color.argb(100, 255, 255, 255); textSize = 24f
+                    color = android.graphics.Color.argb(160, 255, 255, 255); textSize =
+                    24f; textAlign = android.graphics.Paint.Align.LEFT
                 }
-                notes.forEach { (n, f, white) ->
-                    val y = h - ((log2(f.toDouble()) - logF) / (logT - logF) * h).toFloat()
-                    if (white) {
-                        c.nativeCanvas.drawText(n, 10f, y, p); drawLine(
+                val cp = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE; textSize = 32f; isFakeBoldText = true
+                }
+                chords.forEach { ch ->
+                    val cX = ch.startSample * w / total
+                    if (cX in 0f..w) c.nativeCanvas.drawText(ch.label, cX + 8f, 40f, cp)
+                }
+                val ch = h / notes.size
+                notes.forEachIndexed { i, (name, _, isWhite) ->
+                    val y = h - (i + 0.5f) * ch
+                    if (isWhite) {
+                        c.nativeCanvas.drawText(name, 10f, y + 8f, p)
+                        drawLine(
                             Color.White.copy(0.15f),
-                            Offset(0f, y),
-                            Offset(w, y)
+                            Offset(0f, h - (i + 1) * ch),
+                            Offset(w, h - (i + 1) * ch),
+                            1.dp.toPx()
                         )
-                    } else drawLine(Color.White.copy(0.05f), Offset(0f, y), Offset(w, y))
+                    } else drawLine(
+                        Color.White.copy(0.05f),
+                        Offset(0f, h - (i + 1) * ch),
+                        Offset(w, h - (i + 1) * ch),
+                        0.5.dp.toPx()
+                    )
                 }
             }
         }

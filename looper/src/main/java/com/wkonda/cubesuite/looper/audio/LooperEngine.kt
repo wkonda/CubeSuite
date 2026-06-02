@@ -33,14 +33,18 @@ class LooperEngine {
     @SuppressLint("MissingPermission")
     suspend fun startRecording() = withContext(Dispatchers.IO) {
         rec = AudioRecord(MediaRecorder.AudioSource.MIC, sR, AudioFormat.CHANNEL_IN_MONO, enc, bS)
-        val list = ArrayList<Short>(sR * 10)
+        val maxSamples = LooperConfig.MAX_RECORD_SAMPLES
+        val list = java.util.ArrayDeque<Short>(maxSamples)
         val buf = ShortArray(bS)
         rec?.startRecording(); isR = true
         var lastUpdate = 0L
         while (isR) {
             val r = rec?.read(buf, 0, bS) ?: 0
             if (r > 0) {
-                for (i in 0 until r) list.add((buf[i].toInt() shl 1).toShort()) // Boost x2 using shift
+                for (i in 0 until r) {
+                    if (list.size >= maxSamples) list.removeFirst()
+                    list.addLast((buf[i].toInt() shl 1).toShort())
+                }
                 val now = System.currentTimeMillis()
                 if (now - lastUpdate > 100) {
                     _data.value = list.toShortArray()
