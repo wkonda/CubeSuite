@@ -45,7 +45,8 @@ fun WaveformView(
     onsets: List<Int> = emptyList(),
     beatGrid: List<Int> = emptyList(),
     chords: List<ChordRegion> = emptyList(),
-    correlationCurve: List<Pair<Int, Double>> = emptyList()
+    correlationCurve: List<Pair<Int, Double>> = emptyList(),
+    rhythmicCurve: List<Pair<Int, Double>> = emptyList()
 ) {
     if (data == null) return
     var size by remember { mutableStateOf(IntSize.Zero) };
@@ -53,8 +54,10 @@ fun WaveformView(
     val curS by rememberUpdatedState(start);
     val curE by rememberUpdatedState(end)
     val displayData = if (recording) {
-        val windowSize = 5 * 48000 // 5 seconds
-        if (data.size > windowSize) data.copyOfRange(data.size - windowSize, data.size) else data
+        val windowSize = 5 * 48000; if (data.size > windowSize) data.copyOfRange(
+            data.size - windowSize,
+            data.size
+        ) else data
     } else data
 
     Box(Modifier
@@ -97,12 +100,12 @@ fun WaveformView(
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
                         val n = (ch.position.x * data.size / w).toInt()
-                        if (handle == 0) onStart(
+                        if (handle == 0) onStart(n.coerceIn(0, curE - 100)) else onEnd(
                             n.coerceIn(
-                                0,
-                                curE - 100
+                                curS + 100,
+                                data.size
                             )
-                        ) else onEnd(n.coerceIn(curS + 100, data.size))
+                        )
                         ch.consume()
                     }
                     handle = -1
@@ -114,10 +117,8 @@ fun WaveformView(
             val h = size.height.toFloat(); if (w <= 0 || h <= 0 || recording) return@Canvas
             val sX = curS * w / data.size;
             val eX = curE * w / data.size
-
             val darkRed = Color(0xFF8B0000)
 
-            // Boundaries
             drawLine(
                 if (handle == 0) Color.White else darkRed,
                 Offset(sX, 0f),
@@ -140,51 +141,64 @@ fun WaveformView(
                 )
             }
 
-            // Beats
             beatGrid.forEach { b ->
-                val bX = b * w / data.size
-                if (bX in 0f..w) drawLine(
-                    darkRed.copy(0.6f),
-                    Offset(bX, 0f),
-                    Offset(bX, h),
-                    1.dp.toPx()
-                )
+                val bX = b * w / data.size; if (bX in 0f..w) drawLine(
+                darkRed.copy(0.6f),
+                Offset(bX, 0f),
+                Offset(bX, h),
+                1.dp.toPx()
+            )
             }
 
             chords.forEach { c ->
                 val cX = c.startSample * w / data.size
-                if (cX in 0f..w) {
-                    drawIntoCanvas { canvas ->
-                        val p = android.graphics.Paint().apply {
-                            color = android.graphics.Color.WHITE
-                            textSize = 32f
-                            isFakeBoldText = true
-                        }
-                        canvas.nativeCanvas.drawText(c.label, cX + 8f, 40f, p)
-                    }
+                if (cX in 0f..w) drawIntoCanvas {
+                    it.nativeCanvas.drawText(
+                        c.label,
+                        cX + 8f,
+                        40f,
+                        android.graphics.Paint().apply {
+                            color = android.graphics.Color.WHITE; textSize = 32f; isFakeBoldText =
+                            true
+                        })
                 }
             }
 
-            // Correlation Curve
-            if (correlationCurve.isNotEmpty()) {
+            if (rhythmicCurve.isNotEmpty()) {
                 val path = androidx.compose.ui.graphics.Path()
-                val minSim = correlationCurve.minOf { it.second }.toFloat()
-                val maxSim = correlationCurve.maxOf { it.second }.toFloat()
-                val range = (maxSim - minSim).coerceAtLeast(0.01f)
-
-                correlationCurve.forEachIndexed { i, p ->
-                    val x = p.first.toFloat() * w / data.size
-                    val sim = p.second.toFloat()
-                    // Normalize between min and max to take full height
-                    val normY = (sim - minSim) / range
-                    val y = h - (normY * h)
+                rhythmicCurve.forEachIndexed { i, p ->
+                    val x = p.first.toFloat() * w / data.size;
+                    val y = h - (p.second.toFloat() * h * 0.4f)
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 drawPath(
-                    path = path,
-                    color = Color.Yellow,
+                    path,
+                    Color.Blue.copy(0.6f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx())
+                )
+            }
+
+            if (correlationCurve.isNotEmpty()) {
+                val path = androidx.compose.ui.graphics.Path();
+                val minSim = correlationCurve.minOf { it.second }.toFloat();
+                val maxSim = correlationCurve.maxOf { it.second }.toFloat();
+                val range = (maxSim - minSim).coerceAtLeast(0.01f)
+                var lastX = -1f
+                correlationCurve.forEach { p ->
+                    val x = p.first.toFloat() * w / data.size;
+                    val normY = (p.second.toFloat() - minSim) / range;
+                    val y = (h * 0.1f) + (1f - normY) * (h * 0.5f)
+                    if (lastX == -1f || abs(x - lastX) > (2048f * w / data.size)) path.moveTo(
+                        x,
+                        y
+                    ) else path.lineTo(x, y)
+                    lastX = x
+                }
+                drawPath(
+                    path,
+                    Color.Yellow,
                     style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 1.dp.toPx(), // Fine line (1px equivalent)
+                        1.5.dp.toPx(),
                         pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(4.dp.toPx())
                     )
                 )

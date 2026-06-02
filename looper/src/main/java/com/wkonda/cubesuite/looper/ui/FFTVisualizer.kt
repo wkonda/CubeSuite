@@ -48,7 +48,8 @@ fun FFTVisualizer(
     onsets: List<Int> = emptyList(),
     beatGrid: List<Int> = emptyList(),
     chords: List<ChordRegion> = emptyList(),
-    correlationCurve: List<Pair<Int, Double>> = emptyList()
+    correlationCurve: List<Pair<Int, Double>> = emptyList(),
+    rhythmicCurve: List<Pair<Int, Double>> = emptyList()
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) };
     var handle by remember { mutableIntStateOf(-1) }
@@ -164,22 +165,44 @@ fun FFTVisualizer(
                 )
             }
 
+            if (rhythmicCurve.isNotEmpty()) {
+                val path = androidx.compose.ui.graphics.Path()
+                rhythmicCurve.forEachIndexed { i, p ->
+                    val x = p.first.toFloat() * w / total
+                    val y = h - (p.second.toFloat() * h * 0.4f)
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path,
+                    Color.Blue.copy(0.6f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+            }
+
             if (correlationCurve.isNotEmpty()) {
                 val path = androidx.compose.ui.graphics.Path()
                 val minSim = correlationCurve.minOf { it.second }.toFloat()
                 val maxSim = correlationCurve.maxOf { it.second }.toFloat()
                 val range = (maxSim - minSim).coerceAtLeast(0.01f)
-                correlationCurve.forEachIndexed { i, p ->
+                var lastX = -1f
+                correlationCurve.forEach { p ->
                     val x = p.first.toFloat() * w / total
                     val sim = p.second.toFloat()
                     val normY = (sim - minSim) / range
-                    val y = h - (normY * h)
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    val y = (h * 0.1f) + (1f - normY) * (h * 0.5f)
+
+                    val expectedMaxGap = (2048f * w / total)
+                    if (lastX == -1f || abs(x - lastX) > expectedMaxGap) {
+                        path.moveTo(x, y)
+                    } else {
+                        path.lineTo(x, y)
+                    }
+                    lastX = x
                 }
                 drawPath(
                     path,
                     Color.Yellow,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
                 )
             }
 

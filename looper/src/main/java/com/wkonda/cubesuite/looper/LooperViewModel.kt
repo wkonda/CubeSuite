@@ -28,10 +28,8 @@ data class LooperUiState(
     val onsets: List<Int> = emptyList(),
     val beatGrid: List<Int> = emptyList(),
     val chords: List<ChordRegion> = emptyList(),
-    val userSignature: Pair<Int, Int>? = null,
-    val userBars: Int? = null,
-    val suggestedSignature: Pair<Int, Int> = 4 to 4,
-    val suggestedBars: Int = 4,
+    val signature: Pair<Int, Int> = 4 to 4,
+    val bars: Int = 4,
     val spectrogram: List<List<Double>> = emptyList(),
     val showSpectrogram: Boolean = false,
     val activeLoop: LoopMetadata? = null,
@@ -39,20 +37,15 @@ data class LooperUiState(
     val showSaveDialog: Boolean = false,
     val loopName: String = "New Loop",
     val liveBpm: Double = 0.0,
-    val correlationCurve: List<Pair<Int, Double>> = emptyList()
+    val correlationCurve: List<Pair<Int, Double>> = emptyList(),
+    val rhythmicCurve: List<Pair<Int, Double>> = emptyList()
 ) {
-    val currentSignature: Pair<Int, Int> get() = userSignature ?: suggestedSignature
-    val currentBars: Int get() = userBars ?: suggestedBars
-
-    val totalBeats: Int get() = currentBars * currentSignature.first
-
+    val totalBeats: Int get() = bars * signature.first
     val bpm: Double?
         get() {
             if (isRecording) return liveBpm
-            if (recordingData == null) return null
-            val durationSamples = (endSample - startSample).toDouble()
-            if (durationSamples <= 0) return null
-            return (totalBeats.toDouble() * 60.0 * LooperConfig.SAMPLE_RATE) / durationSamples
+            if (recordingData == null || (endSample - startSample) <= 0) return null
+            return (totalBeats.toDouble() * 60.0 * LooperConfig.SAMPLE_RATE) / (endSample - startSample)
         }
 }
 
@@ -67,10 +60,12 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
             engine.recordingData.collect { d ->
                 if (d == null) return@collect
                 _uiState.update { it.copy(recordingData = d) }
-                val s = _uiState.value
-                if (s.isRecording) {
-                    _uiState.update { it.copy(startSample = 0, endSample = d.size) }
-                } else if (s.activeLoop == null && s.spectrogram.isEmpty()) analyze()
+                if (_uiState.value.isRecording) _uiState.update {
+                    it.copy(
+                        startSample = 0,
+                        endSample = d.size
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -99,9 +94,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
     }
 
     fun stopRecording() {
-        engine.stopRecording()
-        _uiState.update { it.copy(isRecording = false) }
-        analyze()
+        engine.stopRecording(); _uiState.update { it.copy(isRecording = false) }
     }
 
     fun togglePlayback() = viewModelScope.launch {
@@ -126,13 +119,9 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
 
     fun analyze() = viewModelScope.launch {
         val d = _uiState.value.recordingData ?: return@launch
-        val s = _uiState.value
         _uiState.update { it.copy(isAnalyzing = true) }
-
         withContext(Dispatchers.Default) {
-            val r = analyzer.analyze(d, s.startSample, s.endSample, 4)
-            val spec = analyzer.getSpectrogram(d)
-
+            val r = analyzer.analyze(d, _uiState.value.startSample, _uiState.value.bars)
             _uiState.update {
                 it.copy(
                     startSample = r.startSample,
@@ -140,10 +129,9 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                     onsets = r.onsets,
                     beatGrid = r.beatGrid,
                     chords = r.chords,
-                    suggestedBars = r.suggestedBars,
-                    suggestedSignature = r.suggestedSignature,
-                    spectrogram = spec,
+                    spectrogram = analyzer.getSpectrogram(d),
                     correlationCurve = r.correlationCurve,
+                    rhythmicCurve = r.rhythmicCurve,
                     isAnalyzing = false
                 )
             }
@@ -153,101 +141,101 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
 
     private fun updateGrid() {
         val s = _uiState.value
-        val totalSamples = s.endSample - s.startSample
-        if (totalSamples <= 0) return
-
-        val grid = mutableListOf<Int>()
-        val totalBeats = s.totalBeats
-        val samplesPerBeat = totalSamples / totalBeats
-        for (i in 0 until totalBeats) {
-            grid.add(s.startSample + i * samplesPerBeat)
-        }
+        if ((s.endSample - s.startSample) <= 0) return
+        val grid =
+            List(s.totalBeats) { i -> s.startSample + (i * (s.endSample - s.startSample).toDouble() / s.totalBeats).toInt() }
         _uiState.update { it.copy(beatGrid = grid) }
     }
 
-    fun updateStart(v: Int) {
-        _uiState.update {
-            it.copy(
-                startSample = v.coerceIn(0, it.endSample - 100),
-                correlationCurve = emptyList()
-            )
-        }
-        updateGrid()
+    fun updateStart(s: Int) {
+        _uiState.update { it.copy(startSample = s) }; updateGrid()
     }
 
-    fun updateEnd(v: Int) {
-        _uiState.update {
-            it.copy(
-                endSample = v.coerceIn(
-                    it.startSample + 100,
-                    it.recordingData?.size ?: 0
-                )
-            )
-        }
-        updateGrid()
+    fun updateEnd(e: Int) {
+        _uiState.update { it.copy(endSample = e) }; updateGrid()
     }
 
-    fun showSave() = _uiState.update { it.copy(showSaveDialog = true) }
-    fun hideSave() = _uiState.update { it.copy(showSaveDialog = false) }
-    fun updateLoopName(n: String) = _uiState.update { it.copy(loopName = n) }
-    fun toggleView() = _uiState.update { it.copy(showSpectrogram = !it.showSpectrogram) }
+    fun showSave() {
+        _uiState.update { it.copy(showSaveDialog = true) }
+    }
+
+    fun hideSave() {
+        _uiState.update { it.copy(showSaveDialog = false) }
+    }
+
+    fun updateLoopName(n: String) {
+        _uiState.update { it.copy(loopName = n) }
+    }
+
+    fun toggleView() {
+        _uiState.update { it.copy(showSpectrogram = !it.showSpectrogram) }
+    }
 
     fun setUserSignature(num: Int, den: Int) {
-        _uiState.update { it.copy(userSignature = num to den) }
-        updateGrid()
+        _uiState.update { it.copy(signature = num to den) }; updateGrid()
     }
 
-    fun clearUserSignature() {
-        _uiState.update { it.copy(userSignature = null) }
-        updateGrid()
-    }
-
-    fun setUserBars(bars: Int?) {
-        _uiState.update { it.copy(userBars = bars) }
-        updateGrid()
+    fun setUserBars(bars: Int) {
+        _uiState.update { it.copy(bars = bars) }; updateGrid()
     }
 
     fun saveOrUpdate() = viewModelScope.launch {
         val s = _uiState.value;
         val d = s.recordingData ?: return@launch
-        val sig = "${s.currentSignature.first}/${s.currentSignature.second}"
+        val sigString = "${s.signature.first}/${s.signature.second}"
         if (s.activeLoop != null) {
-            val u = s.activeLoop.copy(
+            val updated = s.activeLoop.copy(
+                name = s.loopName,
                 startSample = s.startSample,
                 endSample = s.endSample,
                 bpm = s.bpm,
-                timeSignature = sig
+                timeSignature = sigString,
+                bars = s.bars
             )
-            repository.updateLoop(u); _uiState.update { it.copy(activeLoop = u) }
+            repository.updateLoop(updated); _uiState.update {
+                it.copy(
+                    showSaveDialog = false,
+                    activeLoop = updated
+                )
+            }
         } else {
-            val v = repository.saveLoop(s.loopName, d, s.startSample, s.endSample, s.bpm, sig)
-            _uiState.update { it.copy(activeLoop = v, showSaveDialog = false) }
+            val meta = repository.saveLoop(
+                s.loopName,
+                d,
+                s.startSample,
+                s.endSample,
+                s.bpm,
+                sigString,
+                s.bars
+            )
+            _uiState.update { it.copy(showSaveDialog = false, activeLoop = meta) }
         }
+        loadLoops()
     }
 
-    fun loadLoop(l: LoopMetadata) = viewModelScope.launch {
-        val d = repository.loadLoopData(l); engine.loadData(d, l.startSample, l.endSample)
+    fun loadLoop(m: LoopMetadata) = viewModelScope.launch {
+        engine.stopPlayback();
+        val d = repository.loadLoopData(m)
+        val sig = m.timeSignature.split("/").let { it[0].toInt() to it[1].toInt() }
         _uiState.update {
             it.copy(
-                activeLoop = l,
-                startSample = l.startSample,
-                endSample = l.endSample,
                 screen = "looper",
-                showSpectrogram = false
+                recordingData = d,
+                startSample = m.startSample,
+                endSample = m.endSample,
+                bars = m.bars,
+                signature = sig,
+                activeLoop = m,
+                loopName = m.name,
+                spectrogram = emptyList()
             )
         }
-        analyze()
+        engine.loadData(d, m.startSample, m.endSample); updateGrid()
     }
 
-    fun deleteLoop(l: LoopMetadata) = viewModelScope.launch {
-        repository.deleteLoop(l); if (_uiState.value.activeLoop?.id == l.id) _uiState.update {
-        it.copy(
-            activeLoop = null
-        )
-    }; loadLoops()
-    }
+    fun deleteLoop(m: LoopMetadata) =
+        viewModelScope.launch { repository.deleteLoop(m); loadLoops() }
 
-    private fun loadLoops() = viewModelScope.launch {
-        val l = repository.getAllLoops(); _uiState.update { it.copy(loops = l) }
-    }
+    fun loadLoops() =
+        viewModelScope.launch { _uiState.update { it.copy(loops = repository.getAllLoops()) } }
 }

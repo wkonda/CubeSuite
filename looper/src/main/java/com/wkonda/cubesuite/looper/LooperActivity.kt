@@ -64,17 +64,14 @@ class LooperActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
         window.apply {
-            statusBarColor = "#161616".toColorInt()
-            navigationBarColor = "#161616".toColorInt()
+            statusBarColor = "#161616".toColorInt(); navigationBarColor = "#161616".toColorInt()
         }
-
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
         setContent {
             CubeSuiteTheme {
                 val s by vm.uiState.collectAsState()
                 Surface(color = AppDarkBackground, modifier = Modifier.fillMaxSize()) {
-                    if (s.screen == "looper") LooperScreen(s, vm)
-                    else LibraryScreen(s, vm)
+                    if (s.screen == "looper") LooperScreen(s, vm) else LibraryScreen(s, vm)
                 }
             }
         }
@@ -83,7 +80,7 @@ class LooperActivity : ComponentActivity() {
 
 @Composable
 fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
-    var sigMenuExpanded by remember { mutableStateOf(false) }
+    var sigMenuExpanded by remember { mutableStateOf(false) };
     var barsMenuExpanded by remember { mutableStateOf(false) }
     val sigs = listOf(4 to 4, 3 to 4, 6 to 8, 2 to 4, 5 to 4)
 
@@ -102,7 +99,6 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (s.isRecording) FontWeight.Bold else FontWeight.Normal
                     )
-
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "  |  ",
@@ -111,62 +107,48 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                         )
                         Box {
                             Text(
-                                text = "${s.currentBars} bars",
-                                color = if (s.userBars != null) CyanAccent else Color.Gray,
+                                text = "${s.bars} bars",
+                                color = CyanAccent,
                                 style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.clickable { barsMenuExpanded = true }
-                            )
+                                modifier = Modifier.clickable { barsMenuExpanded = true })
                             DropdownMenu(
                                 expanded = barsMenuExpanded,
                                 onDismissRequest = { barsMenuExpanded = false },
                                 modifier = Modifier.background(TextGrayBox)
                             ) {
-                                DropdownMenuItem(
-                                    text = {
+                                (1..16).forEach { b ->
+                                    DropdownMenuItem(text = {
                                         Text(
-                                            "AUTO (${s.suggestedBars})",
+                                            "$b bars",
                                             color = CyanAccent
                                         )
-                                    },
-                                    onClick = { vm.setUserBars(null); barsMenuExpanded = false }
-                                )
-                                (1..16).forEach { b ->
-                                    DropdownMenuItem(
-                                        text = { Text("$b bars", color = CyanAccent) },
-                                        onClick = { vm.setUserBars(b); barsMenuExpanded = false }
-                                    )
+                                    }, onClick = { vm.setUserBars(b); barsMenuExpanded = false })
                                 }
                             }
                         }
                         Text(" of ", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         Box {
                             Text(
-                                text = "${s.currentSignature.first}/${s.currentSignature.second}",
-                                color = if (s.userSignature != null) CyanAccent else Color.Gray,
+                                text = "${s.signature.first}/${s.signature.second}",
+                                color = CyanAccent,
                                 style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.clickable { sigMenuExpanded = true }
-                            )
+                                modifier = Modifier.clickable { sigMenuExpanded = true })
                             DropdownMenu(
                                 expanded = sigMenuExpanded,
                                 onDismissRequest = { sigMenuExpanded = false },
                                 modifier = Modifier.background(TextGrayBox)
                             ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "AUTO (${s.suggestedSignature.first}/${s.suggestedSignature.second})",
-                                            color = CyanAccent
-                                        )
-                                    },
-                                    onClick = { vm.clearUserSignature(); sigMenuExpanded = false }
-                                )
                                 sigs.forEach { (n, d) ->
                                     DropdownMenuItem(
-                                        text = { Text("$n/$d", color = CyanAccent) },
+                                        text = {
+                                            Text(
+                                                "$n/$d",
+                                                color = CyanAccent
+                                            )
+                                        },
                                         onClick = {
                                             vm.setUserSignature(n, d); sigMenuExpanded = false
-                                        }
-                                    )
+                                        })
                                 }
                             }
                         }
@@ -184,7 +166,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                         contentColor = CyanAccent
                     ),
                     shape = RoundedCornerShape(4.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
                     Text(
                         if (s.showSpectrogram) "WAVE" else "SPECTRO",
@@ -198,7 +180,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                         contentColor = CyanAccent
                     ),
                     shape = RoundedCornerShape(4.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Text("LIBRARY", style = MaterialTheme.typography.labelSmall)
                 }
@@ -225,7 +207,8 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 s.onsets,
                 s.beatGrid,
                 s.chords,
-                s.correlationCurve
+                s.correlationCurve,
+                s.rhythmicCurve
             )
             else WaveformView(
                 s.recordingData,
@@ -239,7 +222,8 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 s.onsets,
                 s.beatGrid,
                 s.chords,
-                s.correlationCurve
+                s.correlationCurve,
+                s.rhythmicCurve
             )
         }
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {

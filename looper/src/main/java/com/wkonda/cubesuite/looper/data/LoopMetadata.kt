@@ -11,5 +11,6 @@ data class LoopMetadata(
     val totalSamples: Int,
     val bpm: Double? = null,
     val timeSignature: String = "4/4",
+    val bars: Int = 4,
     val sampleRate: Int = LooperConfig.SAMPLE_RATE
 )

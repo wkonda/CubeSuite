@@ -2,7 +2,11 @@ package com.wkonda.cubesuite.looper.audio
 
 class BeatTracker {
 
-    data class BeatResult(val bpm: Double, val beatGrid: List<Int>)
+    data class BeatResult(
+        val bpm: Double,
+        val beatGrid: List<Int>,
+        val beatSaliency: List<Double> = emptyList()
+    )
 
     fun trackBeats(
         flux: List<Double>,
@@ -12,7 +16,6 @@ class BeatTracker {
     ): BeatResult {
         if (flux.isEmpty()) return BeatResult(120.0, emptyList())
 
-        // 1. AUTOCORRELATION (40-220 BPM)
         val minLag = (60.0 * sampleRate / (220.0 * stepSize)).toInt()
         val maxLag = (60.0 * sampleRate / (40.0 * stepSize)).toInt()
 
@@ -25,12 +28,10 @@ class BeatTracker {
             rawCorr[lag] = sum
         }
 
-        // 2. HARMONIC AGGREGATION (Comb Filter)
         var bestLag = (60.0 * sampleRate / (120.0 * stepSize)).toInt()
         var bestScore = -1.0
 
         for (lag in minLag..maxLag) {
-            // Aggregate fundamental and harmonics
             var score = rawCorr[lag]
             if (lag * 2 <= maxLag) score += 0.8 * rawCorr[lag * 2]
             if (lag * 3 <= maxLag) score += 0.6 * rawCorr[lag * 3]
@@ -43,6 +44,24 @@ class BeatTracker {
         }
 
         val bpm = (60.0 * sampleRate) / (bestLag * stepSize)
+
+        val saliency = List(flux.size) { t ->
+            var score = 0.0
+            val window = 2
+            for (off in -window..window) {
+                val idx = t + off
+                if (idx in flux.indices) {
+                    val nextIdx = idx + bestLag
+                    val prevIdx = idx - bestLag
+                    if (nextIdx in flux.indices) score += flux[idx] * flux[nextIdx]
+                    if (prevIdx in flux.indices) score += flux[idx] * flux[prevIdx]
+                }
+            }
+            score
+        }
+        val maxSal = saliency.maxOrNull()?.coerceAtLeast(1e-6) ?: 1.0
+        val normalizedSaliency = saliency.map { it / maxSal }
+
         val grid = mutableListOf<Int>()
         var curr = 0
         while (curr < flux.size) {
@@ -50,6 +69,6 @@ class BeatTracker {
             curr += bestLag
         }
 
-        return BeatResult(bpm, grid)
+        return BeatResult(bpm, grid, normalizedSaliency)
     }
 }
