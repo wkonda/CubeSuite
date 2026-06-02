@@ -1,12 +1,11 @@
 package com.wkonda.cubesuite.looper.audio
 
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.round
 import kotlin.math.sqrt
 
 class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
@@ -42,7 +41,8 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
         val rhythmicCurve = mutableListOf<Pair<Int, Double>>()
         val beatRes = beatTracker.trackBeats(c.novelty.ifEmpty { c.flux }, sampleRate, step)
         val onsetSamples = c.onsets.map { it * step }
-        val snappedS = if (loopStart == 0) AudioUtils.findNearestZeroCrossing(
+        val snappedS =
+            if (loopStart == 0 && onsetSamples.isNotEmpty()) AudioUtils.findNearestZeroCrossing(
             data,
             onsetSamples.firstOrNull { it > sampleRate / 10 } ?: 0
         ) else loopStart
@@ -124,25 +124,78 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
         return AnalysisResult(snappedS, data.size, onsetSamples, beatRes.bpm)
     }
 
+    private val hybridBinRanges by lazy {
+        val win = LooperConfig.FFT_WINDOW_SIZE
+        val sr = sampleRate.toDouble()
+        val srDown = sr / 4.0
+        val bR = sr / win
+        val bRDown = srDown / win
+
+        List(49) { bI ->
+            val midi = 36 + bI
+            val low = 440.0 * 2.0.pow((midi - 0.5 - 69.0) / 12.0)
+            val high = 440.0 * 2.0.pow((midi + 0.5 - 69.0) / 12.0)
+
+            // Use downsampled FFT for lower 2 octaves (MIDI 36 to 60)
+            if (bI <= 24) {
+                val bS = (low / bRDown).toInt().coerceAtLeast(0)
+                val bE = ceil(high / bRDown).toInt().coerceIn(bS + 1, win / 2)
+                true to (bS until bE)
+            } else {
+                val bS = (low / bR).toInt().coerceAtLeast(0)
+                val bE = ceil(high / bR).toInt().coerceIn(bS + 1, win / 2)
+                false to (bS until bE)
+            }
+        }
+    }
+
     private fun getOrCompute(data: ShortArray, beats: Int): Cache {
         val h = data.contentHashCode(); cache?.let { if (it.hash == h) return it }
         val win = LooperConfig.FFT_WINDOW_SIZE
         val step = LooperConfig.FFT_STEP_SIZE
-        val bR = sampleRate.toDouble() / win
-        val spec = List((data.size - win) / step) { i ->
-            val buf = DoubleArray(win * 2); for (j in 0 until win) buf[j * 2] =
-            (data[i * step + j].toDouble() / Short.MAX_VALUE) * (0.35875 - 0.48829 * cos(2 * PI * j / (win - 1)) + 0.14128 * cos(
-                4 * PI * j / (win - 1)
-            ) - 0.01168 * cos(6 * PI * j / (win - 1)))
-            AudioUtils.fft(buf); List(49) { bI ->
-            val midi = 36 + bI
-            val low = 440.0 * 2.0.pow((midi - 0.5 - 69.0) / 12.0)
-            val high = 440.0 * 2.0.pow((midi + 0.5 - 69.0) / 12.0)
-            val bS = max(0, round(low / bR).toInt())
-            val bE = min(win / 2, round(high / bR).toInt())
-            var maxM = 0.0; for (k in bS until bE) {
-            val m = sqrt(buf[k * 2].pow(2) + buf[k * 2 + 1].pow(2)); if (m > maxM) maxM = m
-        }; 20.0 * log10(max(1e-9, maxM))
+
+        if (data.size < win) return Cache(h, emptyList(), emptyList(), emptyList(), emptyList())
+        val dataDown = DoubleArray(data.size / 4)
+        for (i in dataDown.indices) {
+            dataDown[i] =
+                (data[i * 4].toDouble() + data[i * 4 + 1] + data[i * 4 + 2] + data[i * 4 + 3]) / (4.0 * Short.MAX_VALUE)
+        }
+
+        val spec = List((data.size - win) / step) { fIdx ->
+            // Original FFT for high freqs
+            val bufFull = DoubleArray(win * 2)
+            for (j in 0 until win) {
+                val w =
+                    0.35875 - 0.48829 * cos(2 * PI * j / (win - 1)) + 0.14128 * cos(4 * PI * j / (win - 1))
+                bufFull[j * 2] = (data[fIdx * step + j].toDouble() / Short.MAX_VALUE) * w
+            }
+            AudioUtils.fft(bufFull)
+
+            // Downsampled FFT for low freqs
+            // We align the window center. The downsampled window covers 4x the time.
+            val bufDown = DoubleArray(win * 2)
+            val centerSample = fIdx * step + win / 2
+            val downStart = (centerSample / 4 - win / 2).coerceIn(0, dataDown.size - win)
+            for (j in 0 until win) {
+                val w =
+                    0.35875 - 0.48829 * cos(2 * PI * j / (win - 1)) + 0.14128 * cos(4 * PI * j / (win - 1))
+                bufDown[j * 2] = dataDown[downStart + j] * w
+            }
+            AudioUtils.fft(bufDown)
+
+            List(49) { bI ->
+                val (isDown, range) = hybridBinRanges[bI]
+                val buf = if (isDown) bufDown else bufFull
+
+                // Sum the power (energy) across the entire +/- 50% semitone range
+                var energySum = 0.0
+                for (k in range) {
+                    val re = buf[k * 2]
+                    val im = buf[k * 2 + 1]
+                    energySum += (re * re + im * im)
+                }
+                // Convert integrated energy to dB
+                10.0 * log10(max(1e-12, energySum))
             }
         }
         val flux = List(spec.size) { t ->
@@ -166,11 +219,10 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
     fun getSpectrogram(data: ShortArray): List<List<Double>> {
         if (data.isEmpty()) return emptyList()
         val c = getOrCompute(data, 4)
-        return List(600) { i ->
-            c.spec[(i.toDouble() / 600 * c.spec.size).toInt().coerceIn(c.spec.indices)].subList(
-                4,
-                29
-            )
+        val targetSize = 600
+        if (c.spec.isEmpty()) return emptyList()
+        return List(targetSize) { i ->
+            c.spec[(i.toDouble() / targetSize * c.spec.size).toInt().coerceIn(c.spec.indices)]
         }
     }
 }

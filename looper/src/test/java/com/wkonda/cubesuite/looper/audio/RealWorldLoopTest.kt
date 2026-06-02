@@ -52,12 +52,11 @@ class RealWorldLoopTest {
 
             println("--- Testing loop: ${fields["name"]} ($fileName) ---")
 
-            val result = analyzer.analyze(shortData, 0, shortData.size, 4)
+            val result = analyzer.analyze(shortData, 0, 4)
 
             println("  Manual S: $expectedStart, AI S: ${result.startSample} (Diff: ${result.startSample - expectedStart})")
             println("  Manual E: $expectedEnd, AI E: ${result.endSample} (Diff: ${result.endSample - expectedEnd})")
             println("  Detected Chords: ${result.chords.map { it.label }.distinct()}")
-            println("  Suggested Bars: ${result.suggestedBars}, Suggested Sig: ${result.suggestedSignature}")
 
             // We don't assert failure here because the AI points might be musically better 
             // than the user's manual points in the manifest. This test is for visual validation.

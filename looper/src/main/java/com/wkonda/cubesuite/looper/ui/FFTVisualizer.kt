@@ -57,7 +57,7 @@ fun FFTVisualizer(
 
     val notes = remember {
         val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-        (40..64).map { m ->
+        (36..84).map { m ->
             Triple(names[m % 12] + ((m / 12) - 1), 0f, !names[m % 12].contains("#"))
         }
     }
@@ -72,23 +72,52 @@ fun FFTVisualizer(
                     val bitmap = ImageBitmap(w.toInt(), h.toInt())
                     CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
                         val ch = h / spec[0].size
+                        val cw = w / 600f
 
                         spec.forEachIndexed { t, mags ->
-                            // Magnitudes are in dB (e.g. -20 to -100)
                             val colMax = mags.maxOrNull() ?: -100.0
-                            // Focus on significant notes: dynamic range of 35dB from peak
-                            val floor = colMax - 35.0
+                            val range = 30.0 // Even tighter range for extreme contrast
+                            val floor = colMax - range
 
                             mags.forEachIndexed { f, m ->
-                                // Scale dB to 0..1 intensity
-                                val intensity = ((m - floor) / 35.0).toFloat().coerceIn(0f, 1f)
+                                // Peak Picking: only draw if it's a local maximum in frequency
+                                // This drastically reduces vertical smearing.
+                                val isPeak =
+                                    (f > 0 && f < mags.size - 1 && m >= mags[f - 1] && m >= mags[f + 1]) ||
+                                            (f == 0 && m >= mags[f + 1]) ||
+                                            (f == mags.size - 1 && m >= mags[f - 1])
 
-                                // Only draw if it's not silence/background noise
-                                if (intensity > 0.05f && m > -90.0) {
+                                val rawIntensity = ((m - floor) / range).toFloat().coerceIn(0f, 1f)
+                                // Cubing the intensity for "super-sharpening"
+                                val intensity = rawIntensity.pow(3f)
+
+                                // If it's a peak, we give it a boost; if not, we dim it heavily
+                                val finalIntensity = if (isPeak) intensity else intensity * 0.3f
+
+                                if (finalIntensity > 0.05f && m > -80.0) {
+                                    val color = when {
+                                        finalIntensity < 0.3f -> lerp(
+                                            AppDarkBackground,
+                                            CyanAccent.copy(alpha = 0.4f),
+                                            finalIntensity / 0.3f
+                                        )
+
+                                        finalIntensity < 0.7f -> lerp(
+                                            CyanAccent.copy(alpha = 0.4f),
+                                            CyanAccent,
+                                            (finalIntensity - 0.3f) / 0.4f
+                                        )
+
+                                        else -> lerp(
+                                            CyanAccent,
+                                            Color.White,
+                                            (finalIntensity - 0.7f) / 0.3f
+                                        )
+                                    }
                                     drawRect(
-                                        lerp(AppDarkBackground, CyanAccent, intensity.pow(1.5f)),
-                                        Offset(t * w / 600f, h - (f + 1) * ch),
-                                        Size(w / 600f + 1f, ch + 1f)
+                                        color,
+                                        Offset(t * cw, h - (f + 1) * ch),
+                                        Size(cw + 1f, ch + 1f)
                                     )
                                 }
                             }
@@ -213,9 +242,14 @@ fun FFTVisualizer(
                 val cp = android.graphics.Paint().apply {
                     color = android.graphics.Color.WHITE; textSize = 32f; isFakeBoldText = true
                 }
+                var lastLabelX = -1000f
                 chords.forEach { ch ->
                     val cX = ch.startSample * w / total
-                    if (cX in 0f..w) c.nativeCanvas.drawText(ch.label, cX + 8f, 40f, cp)
+                    // Only draw label if it's far enough from the last one to be readable
+                    if (cX in 0f..w && abs(cX - lastLabelX) > 80f) {
+                        c.nativeCanvas.drawText(ch.label, cX + 8f, 40f, cp)
+                        lastLabelX = cX
+                    }
                 }
                 val ch = h / notes.size
                 notes.forEachIndexed { i, (name, _, isWhite) ->

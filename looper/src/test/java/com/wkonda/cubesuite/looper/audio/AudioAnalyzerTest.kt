@@ -2,6 +2,7 @@ package com.wkonda.cubesuite.looper.audio
 
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 import kotlin.math.sin
 
 class AudioAnalyzerTest {
@@ -13,8 +14,8 @@ class AudioAnalyzerTest {
         val dataSize = sampleRate * 30
         val data = ShortArray(dataSize)
 
-        // Pattern: C (6s) -> Am (6s) -> C (6s) -> Am (6s) -> C (6s)
-        // This ensures the first transition is at 6s (Bar 2 equivalent)
+        // Pattern: C (4s) -> Am (4s) -> C (4s) -> Am (4s) -> C (4s)
+        // This ensures the first transition is at 4s (Bar 2 equivalent)
         // and the repeat is at 18s.
         fun fill(start: Int, end: Int, freqs: List<Double>) {
             for (i in start until end) {
@@ -27,33 +28,26 @@ class AudioAnalyzerTest {
         val cMaj = listOf(261.63, 329.63, 392.00)
         val aMin = listOf(220.00, 261.63, 329.63)
 
-        fill(0, sampleRate * 6, cMaj)
-        fill(sampleRate * 6, sampleRate * 12, aMin)
-        fill(sampleRate * 12, sampleRate * 18, cMaj)
-        fill(sampleRate * 18, sampleRate * 24, aMin)
-        fill(sampleRate * 24, dataSize, cMaj)
+        fill(0, sampleRate * 4, cMaj)
+        fill(sampleRate * 4, sampleRate * 12, aMin)
+        fill(sampleRate * 8, sampleRate * 18, cMaj)
+        fill(sampleRate * 12, sampleRate * 24, aMin)
+        fill(sampleRate * 16, dataSize, cMaj)
 
         val analyzer = AudioAnalyzer(sampleRate)
-        val result = analyzer.analyze(data, 0, data.size, 4)
+        val result = analyzer.analyze(data, 6 * sampleRate, 4)
 
-        // Expected: Start at first C->Am transition (6s)
-        // Expected: End at second C->Am transition (18s)
-        // Loop Duration: 12s
+        // Loop Duration: 8s
         println("Synthetic Test Result:")
         println("  Start: ${result.startSample / sampleRate.toDouble()}s")
         println("  End: ${result.endSample / sampleRate.toDouble()}s")
 
         assertTrue(
-            "Start should be near 6s, got ${result.startSample / sampleRate.toDouble()}s",
-            Math.abs(result.startSample - 6 * sampleRate) < 50000
-        )
-
-        assertTrue(
-            "End should be near 18s, got ${result.endSample / sampleRate.toDouble()}s",
-            Math.abs(result.endSample - 18 * sampleRate) < 50000
+            "End should be near 14s, got ${result.endSample / sampleRate.toDouble()}s",
+            abs(result.endSample - 14 * sampleRate) < 50000
         )
 
         val duration = (result.endSample - result.startSample).toDouble() / sampleRate
-        assertTrue("Duration should be near 12s, got ${duration}s", Math.abs(duration - 12.0) < 0.1)
+        assertTrue("Duration should be near 8s, got ${duration}s", Math.abs(duration - 8.0) < 0.1)
     }
 }
