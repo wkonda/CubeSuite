@@ -46,7 +46,7 @@ class LooperEngine {
                     list.addLast((buf[i].toInt() shl 1).toShort())
                 }
                 val now = System.currentTimeMillis()
-                if (now - lastUpdate > 100) {
+                if ((now - lastUpdate) > 100) {
                     _data.value = list.toShortArray()
                     lastUpdate = now
                 }
@@ -67,7 +67,7 @@ class LooperEngine {
     suspend fun startPlayback() = withContext(Dispatchers.IO) {
         val d = curD ?: return@withContext
         if (sS >= eS || eS > d.size) return@withContext
-        val len = eS - sS;
+        val len = eS - sS
         val xL = (sR * LooperConfig.CROSSFADE_MS / 1000).coerceAtMost(len / 4)
         val buf = ShortArray(len); System.arraycopy(d, sS, buf, 0, len)
         for (i in 0 until xL) {
@@ -78,7 +78,7 @@ class LooperEngine {
         }
         track = AudioTrack.Builder().setAudioAttributes(
             AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build(),
         )
             .setAudioFormat(
                 AudioFormat.Builder().setEncoding(enc).setSampleRate(sR)

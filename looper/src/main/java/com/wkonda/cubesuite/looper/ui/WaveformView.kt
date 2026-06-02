@@ -42,17 +42,16 @@ fun WaveformView(
     pos: Int = 0,
     playing: Boolean = false,
     recording: Boolean = false,
-    onsets: List<Int> = emptyList(),
     beatGrid: List<Int> = emptyList(),
     chords: List<ChordRegion> = emptyList(),
     correlationCurve: List<Pair<Int, Double>> = emptyList(),
-    rhythmicCurve: List<Pair<Int, Double>> = emptyList()
+    rhythmicCurve: List<Pair<Int, Double>> = emptyList(),
 ) {
     if (data == null) return
-    var size by remember { mutableStateOf(IntSize.Zero) };
+    var size by remember { mutableStateOf(value = IntSize.Zero) }
     var handle by remember { mutableIntStateOf(-1) }
-    val curS by rememberUpdatedState(start);
-    val curE by rememberUpdatedState(end)
+    val curS by rememberUpdatedState(newValue = start)
+    val curE by rememberUpdatedState(newValue = end)
     val displayData = if (recording) {
         val windowSize = 5 * 48000; if (data.size > windowSize) data.copyOfRange(
             data.size - windowSize,
@@ -60,58 +59,59 @@ fun WaveformView(
         ) else data
     } else data
 
-    Box(Modifier
-        .fillMaxSize()
-        .background(AppDarkBackground)
-        .onSizeChanged { size = it }
-        .drawWithCache {
-            val (w, h) = this.size
-            if (w <= 0 || h <= 0) onDrawBehind {} else {
-                val bitmap = ImageBitmap(w.toInt(), h.toInt())
-                CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
-                    val midY = h / 2;
-                    val step = max(1, displayData.size / w.toInt())
-                    for (i in 0 until w.toInt()) {
-                        val idx = i * step; if (idx >= displayData.size) break
-                        val lh = (displayData[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
-                        drawLine(
-                            CyanAccent.copy(0.4f),
-                            Offset(i.toFloat(), midY - lh),
-                            Offset(i.toFloat(), midY + lh)
-                        )
-                    }
-                }
-                onDrawBehind { drawImage(bitmap) }
-            }
-        }
-        .pointerInput(data.size, playing, recording) {
-            if (playing || recording) return@pointerInput
-            awaitEachGesture {
-                val down = awaitFirstDown();
-                val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
-                val sX = curS.toFloat() * w / data.size;
-                val eX = curE.toFloat() * w / data.size
-                handle = when {
-                    abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
-                }
-                if (handle != -1) {
-                    while (true) {
-                        val ev = awaitPointerEvent();
-                        val ch = ev.changes.firstOrNull() ?: break
-                        if (!ch.pressed) break
-                        val n = (ch.position.x * data.size / w).toInt()
-                        if (handle == 0) onStart(n.coerceIn(0, curE - 100)) else onEnd(
-                            n.coerceIn(
-                                curS + 100,
-                                data.size
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(AppDarkBackground)
+            .onSizeChanged { size = it }
+            .drawWithCache {
+                val (w, h) = this.size
+                if (w <= 0 || h <= 0) onDrawBehind {} else {
+                    val bitmap = ImageBitmap(w.toInt(), h.toInt())
+                    CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
+                        val midY = h / 2;
+                        val step = max(1, displayData.size / w.toInt())
+                        for (i in 0 until w.toInt()) {
+                            val idx = i * step; if (idx >= displayData.size) break
+                            val lh = (displayData[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
+                            drawLine(
+                                CyanAccent.copy(0.4f),
+                                Offset(i.toFloat(), midY - lh),
+                                Offset(i.toFloat(), midY + lh)
                             )
-                        )
-                        ch.consume()
+                        }
                     }
-                    handle = -1
+                    onDrawBehind { drawImage(bitmap) }
                 }
             }
-        }) {
+            .pointerInput(data.size, playing, recording) {
+                if (playing || recording) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown();
+                    val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
+                    val sX = curS.toFloat() * w / data.size;
+                    val eX = curE.toFloat() * w / data.size
+                    handle = when {
+                        abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
+                    }
+                    if (handle != -1) {
+                        while (true) {
+                            val ev = awaitPointerEvent();
+                            val ch = ev.changes.firstOrNull() ?: break
+                            if (!ch.pressed) break
+                            val n = (ch.position.x * data.size / w).toInt()
+                            if (handle == 0) onStart(n.coerceIn(0, curE - 100)) else onEnd(
+                                n.coerceIn(
+                                    curS + 100,
+                                    data.size
+                                )
+                            )
+                            ch.consume()
+                        }
+                        handle = -1
+                    }
+                }
+            }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
             val h = size.height.toFloat(); if (w <= 0 || h <= 0 || recording) return@Canvas
@@ -167,26 +167,26 @@ fun WaveformView(
             if (rhythmicCurve.isNotEmpty()) {
                 val path = androidx.compose.ui.graphics.Path()
                 rhythmicCurve.forEachIndexed { i, p ->
-                    val x = p.first.toFloat() * w / data.size;
+                    val x = p.first.toFloat() * w / data.size
                     val y = h - (p.second.toFloat() * h * 0.4f)
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 drawPath(
                     path,
-                    Color.Blue.copy(0.6f),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx())
+                    Color(0xFF44AAFF),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
                 )
             }
 
             if (correlationCurve.isNotEmpty()) {
-                val path = androidx.compose.ui.graphics.Path();
-                val minSim = correlationCurve.minOf { it.second }.toFloat();
-                val maxSim = correlationCurve.maxOf { it.second }.toFloat();
+                val path = androidx.compose.ui.graphics.Path()
+                val minSim = correlationCurve.minOf { it.second }.toFloat()
+                val maxSim = correlationCurve.maxOf { it.second }.toFloat()
                 val range = (maxSim - minSim).coerceAtLeast(0.01f)
                 var lastX = -1f
                 correlationCurve.forEach { p ->
-                    val x = p.first.toFloat() * w / data.size;
-                    val normY = (p.second.toFloat() - minSim) / range;
+                    val x = p.first.toFloat() * w / data.size
+                    val normY = (p.second.toFloat() - minSim) / range
                     val y = (h * 0.1f) + (1f - normY) * (h * 0.5f)
                     if (lastX == -1f || abs(x - lastX) > (2048f * w / data.size)) path.moveTo(
                         x,
@@ -198,8 +198,8 @@ fun WaveformView(
                     path,
                     Color.Yellow,
                     style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        1.5.dp.toPx(),
-                        pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(4.dp.toPx())
+                        width = 1f,
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(radius = 4.dp.toPx())
                     )
                 )
             }

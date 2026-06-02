@@ -11,8 +11,7 @@ class BeatTracker {
     fun trackBeats(
         flux: List<Double>,
         sampleRate: Int,
-        stepSize: Int,
-        chordChanges: List<Int> = emptyList()
+        stepSize: Int
     ): BeatResult {
         if (flux.isEmpty()) return BeatResult(120.0, emptyList())
 

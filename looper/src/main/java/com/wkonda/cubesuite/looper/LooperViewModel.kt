@@ -38,7 +38,7 @@ data class LooperUiState(
     val loopName: String = "New Loop",
     val liveBpm: Double = 0.0,
     val correlationCurve: List<Pair<Int, Double>> = emptyList(),
-    val rhythmicCurve: List<Pair<Int, Double>> = emptyList()
+    val rhythmicCurve: List<Pair<Int, Double>> = emptyList(),
 ) {
     val totalBeats: Int get() = bars * signature.first
     val bpm: Double?
@@ -85,6 +85,11 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                     isRecording = true,
                     spectrogram = emptyList(),
                     showSpectrogram = false,
+                    onsets = emptyList(),
+                    beatGrid = emptyList(),
+                    chords = emptyList(),
+                    correlationCurve = emptyList(),
+                    rhythmicCurve = emptyList(),
                     activeLoop = null,
                     liveBpm = 0.0
                 )
@@ -180,7 +185,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
     }
 
     fun saveOrUpdate() = viewModelScope.launch {
-        val s = _uiState.value;
+        val s = _uiState.value
         val d = s.recordingData ?: return@launch
         val sigString = "${s.signature.first}/${s.signature.second}"
         if (s.activeLoop != null) {
@@ -227,7 +232,12 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                 signature = sig,
                 activeLoop = m,
                 loopName = m.name,
-                spectrogram = emptyList()
+                spectrogram = emptyList(),
+                onsets = emptyList(),
+                beatGrid = emptyList(),
+                chords = emptyList(),
+                correlationCurve = emptyList(),
+                rhythmicCurve = emptyList()
             )
         }
         engine.loadData(d, m.startSample, m.endSample); updateGrid()

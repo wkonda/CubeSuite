@@ -18,10 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.wkonda.cubesuite.looper.audio.LooperConfig
 import com.wkonda.cubesuite.looper.data.LoopMetadata
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.ModTrackRed
 import com.wkonda.cubesuite.ui.theme.TextGrayBox
+import java.util.Locale
 
 @Composable
 fun LoopListScreen(
@@ -54,7 +56,11 @@ fun LoopListScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "${loop.totalSamples} SAMPLES",
+                        String.format(
+                            Locale.US,
+                            "%.2fS",
+                            loop.totalSamples.toDouble() / LooperConfig.SAMPLE_RATE
+                        ),
                         color = Color.Gray,
                         style = MaterialTheme.typography.labelSmall
                     )

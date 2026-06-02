@@ -45,16 +45,15 @@ fun FFTVisualizer(
     modifier: Modifier = Modifier,
     pos: Int = 0,
     playing: Boolean = false,
-    onsets: List<Int> = emptyList(),
     beatGrid: List<Int> = emptyList(),
     chords: List<ChordRegion> = emptyList(),
     correlationCurve: List<Pair<Int, Double>> = emptyList(),
-    rhythmicCurve: List<Pair<Int, Double>> = emptyList()
+    rhythmicCurve: List<Pair<Int, Double>> = emptyList(),
 ) {
-    var size by remember { mutableStateOf(IntSize.Zero) };
+    var size by remember { mutableStateOf(value = IntSize.Zero) }
     var handle by remember { mutableIntStateOf(-1) }
-    val curS by rememberUpdatedState(start);
-    val curE by rememberUpdatedState(end)
+    val curS by rememberUpdatedState(newValue = start)
+    val curE by rememberUpdatedState(newValue = end)
 
     val notes = remember {
         val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
@@ -63,69 +62,69 @@ fun FFTVisualizer(
         }
     }
 
-    Box(modifier
-        .background(AppDarkBackground)
-        .onSizeChanged { size = it }
-        .drawWithCache {
-            val (w, h) = this.size
-            if (spec.isEmpty() || w <= 0 || h <= 0) onDrawBehind {} else {
-                val bitmap = ImageBitmap(w.toInt(), h.toInt())
-                CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
-                    val cw = w / spec.size;
-                    val ch = h / spec[0].size
+    Box(
+        modifier
+            .background(AppDarkBackground)
+            .onSizeChanged { size = it }
+            .drawWithCache {
+                val (w, h) = this.size
+                if (spec.isEmpty() || w <= 0 || h <= 0) onDrawBehind {} else {
+                    val bitmap = ImageBitmap(w.toInt(), h.toInt())
+                    CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
+                        val ch = h / spec[0].size
 
-                    spec.forEachIndexed { t, mags ->
-                        // Magnitudes are in dB (e.g. -20 to -100)
-                        val colMax = mags.maxOrNull() ?: -100.0
-                        // Focus on significant notes: dynamic range of 35dB from peak
-                        val floor = colMax - 35.0
+                        spec.forEachIndexed { t, mags ->
+                            // Magnitudes are in dB (e.g. -20 to -100)
+                            val colMax = mags.maxOrNull() ?: -100.0
+                            // Focus on significant notes: dynamic range of 35dB from peak
+                            val floor = colMax - 35.0
 
-                        mags.forEachIndexed { f, m ->
-                            // Scale dB to 0..1 intensity
-                            val intensity = ((m - floor) / 35.0).toFloat().coerceIn(0f, 1f)
+                            mags.forEachIndexed { f, m ->
+                                // Scale dB to 0..1 intensity
+                                val intensity = ((m - floor) / 35.0).toFloat().coerceIn(0f, 1f)
 
-                            // Only draw if it's not silence/background noise
-                            if (intensity > 0.05f && m > -90.0) {
-                                drawRect(
-                                    lerp(AppDarkBackground, CyanAccent, intensity.pow(1.5f)),
-                                    Offset(t * w / 600f, h - (f + 1) * ch),
-                                    Size(w / 600f + 1f, ch + 1f)
-                                )
+                                // Only draw if it's not silence/background noise
+                                if (intensity > 0.05f && m > -90.0) {
+                                    drawRect(
+                                        lerp(AppDarkBackground, CyanAccent, intensity.pow(1.5f)),
+                                        Offset(t * w / 600f, h - (f + 1) * ch),
+                                        Size(w / 600f + 1f, ch + 1f)
+                                    )
+                                }
                             }
                         }
                     }
+                    onDrawBehind { drawImage(bitmap) }
                 }
-                onDrawBehind { drawImage(bitmap) }
             }
-        }
-        .pointerInput(total, playing) {
-            if (total <= 0 || playing) return@pointerInput
-            awaitEachGesture {
-                val down = awaitFirstDown();
-                val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
-                val sX = curS.toFloat() * w / total;
-                val eX = curE.toFloat() * w / total
-                handle = when {
-                    abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
-                }
-                if (handle != -1) {
-                    while (true) {
-                        val ev = awaitPointerEvent();
-                        val ch = ev.changes.firstOrNull() ?: break
-                        if (!ch.pressed) break
-                        val n = (ch.position.x * total / w).toInt()
-                        if (handle == 0) onStart(n.coerceIn(0, curE - 100)) else onEnd(
-                            n.coerceIn(
-                                curS + 100,
-                                total
-                            )
-                        )
-                        ch.consume()
+            .pointerInput(total, playing) {
+                if (total <= 0 || playing) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown();
+                    val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
+                    val sX = curS.toFloat() * w / total;
+                    val eX = curE.toFloat() * w / total
+                    handle = when {
+                        abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
                     }
-                    handle = -1
+                    if (handle != -1) {
+                        while (true) {
+                            val ev = awaitPointerEvent();
+                            val ch = ev.changes.firstOrNull() ?: break
+                            if (!ch.pressed) break
+                            val n = (ch.position.x * total / w).toInt()
+                            if (handle == 0) onStart(n.coerceIn(0, curE - 100)) else onEnd(
+                                n.coerceIn(
+                                    curS + 100,
+                                    total
+                                )
+                            )
+                            ch.consume()
+                        }
+                        handle = -1
+                    }
                 }
-            }
-        }) {
+            }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
             val h = size.height.toFloat()
@@ -174,8 +173,8 @@ fun FFTVisualizer(
                 }
                 drawPath(
                     path,
-                    Color.Blue.copy(0.6f),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                    Color(0xFF44AAFF),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
                 )
             }
 
@@ -202,7 +201,7 @@ fun FFTVisualizer(
                 drawPath(
                     path,
                     Color.Yellow,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
                 )
             }
 

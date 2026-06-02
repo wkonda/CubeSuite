@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.graphics.toColorInt
+import com.wkonda.cubesuite.looper.audio.LooperConfig
 import com.wkonda.cubesuite.looper.audio.LooperEngine
 import com.wkonda.cubesuite.looper.data.LoopRepository
 import com.wkonda.cubesuite.looper.ui.FFTVisualizer
@@ -80,14 +81,16 @@ class LooperActivity : ComponentActivity() {
 
 @Composable
 fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
-    var sigMenuExpanded by remember { mutableStateOf(false) };
-    var barsMenuExpanded by remember { mutableStateOf(false) }
+    var sigMenuExpanded by remember { mutableStateOf(value = false) }
+    var barsMenuExpanded by remember { mutableStateOf(value = false) }
     val sigs = listOf(4 to 4, 3 to 4, 6 to 8, 2 to 4, 5 to 4)
 
-    Column(Modifier
-        .fillMaxSize()
-        .background(AppDarkBackground)
-        .padding(8.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(AppDarkBackground)
+            .padding(8.dp)
+    ) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
@@ -204,7 +207,6 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 Modifier.fillMaxSize(),
                 s.playbackPosition,
                 s.isPlaying,
-                s.onsets,
                 s.beatGrid,
                 s.chords,
                 s.correlationCurve,
@@ -219,7 +221,6 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 s.playbackPosition,
                 s.isPlaying,
                 s.isRecording,
-                s.onsets,
                 s.beatGrid,
                 s.chords,
                 s.correlationCurve,
@@ -245,13 +246,13 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 "ANALYZE",
                 { vm.analyze() },
                 Modifier.weight(1.5f),
-                (s.recordingData != null && !s.isPlaying && !s.isRecording)
+                (s.recordingData != null && (!s.isPlaying) && (!s.isRecording))
             )
             Btn(
                 if (s.activeLoop != null) "UPDATE" else "SAVE",
                 { if (s.activeLoop != null) vm.saveOrUpdate() else vm.showSave() },
                 Modifier.weight(1.5f),
-                (s.recordingData != null && !s.isPlaying && !s.isRecording)
+                (s.recordingData != null && (!s.isPlaying) && (!s.isRecording))
             )
             if (s.recordingData != null) {
                 Adj(
@@ -273,7 +274,14 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
     }
     if (s.showSaveDialog) AlertDialog(
         onDismissRequest = { vm.hideSave() },
-        confirmButton = { Button({ vm.saveOrUpdate() }) { Text("Save") } },
+        confirmButton = {
+            Button(
+                onClick = { vm.saveOrUpdate() },
+                colors = ButtonDefaults.buttonColors(contentColor = Color.White)
+            ) {
+                Text("Save")
+            }
+        },
         title = { Text("Save") },
         text = {
             TextField(
@@ -341,6 +349,8 @@ fun Adj(
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val step = (LooperConfig.SAMPLE_RATE * 0.002).toInt()
+    val seconds = value.toDouble() / LooperConfig.SAMPLE_RATE
     Surface(
         modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(4.dp),
@@ -353,19 +363,19 @@ fun Adj(
         ) {
             Text(label, color = Color.Gray, style = MaterialTheme.typography.labelSmall)
             IconButton(
-                onClick = { onValueChange(value - 100) },
+                onClick = { onValueChange((value - step).coerceAtLeast(0)) },
                 modifier = Modifier.size(24.dp),
                 enabled = enabled
             ) { Text("-", color = if (enabled) CyanAccent else Color.Gray) }
             Text(
-                value.toString(),
+                String.format(Locale.US, "%.3f", seconds),
                 Modifier.weight(1f),
                 if (enabled) CyanAccent else Color.Gray,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall
             )
             IconButton(
-                onClick = { onValueChange(value + 100) },
+                onClick = { onValueChange(value + step) },
                 modifier = Modifier.size(24.dp),
                 enabled = enabled
             ) { Text("+", color = if (enabled) CyanAccent else Color.Gray) }

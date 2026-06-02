@@ -23,16 +23,16 @@ object AudioUtils {
         }
         var len = 2
         while (len <= n) {
-            val ang = -2.0 * PI / len;
-            val wlr = cos(ang);
+            val ang = -2.0 * PI / len
+            val wlr = cos(ang)
             val wli = sin(ang)
             for (i in 0 until n step len) {
-                var wr = 1.0;
+                var wr = 1.0
                 var wi = 0.0
                 for (k in 0 until len / 2) {
-                    val u = (i + k) * 2;
+                    val u = (i + k) * 2
                     val v = (i + k + len / 2) * 2
-                    val tr = wr * complexData[v] - wi * complexData[v + 1];
+                    val tr = wr * complexData[v] - wi * complexData[v + 1]
                     val ti = wr * complexData[v + 1] + wi * complexData[v]
                     complexData[v] = complexData[u] - tr; complexData[v + 1] =
                         complexData[u + 1] - ti
@@ -45,8 +45,8 @@ object AudioUtils {
     }
 
     fun findNearestZeroCrossing(data: ShortArray, index: Int): Int {
-        val range = LooperConfig.ZERO_CROSSING_SEARCH_RANGE;
-        var bestIdx = index;
+        val range = LooperConfig.ZERO_CROSSING_SEARCH_RANGE
+        var bestIdx = index
         var minDistance = Int.MAX_VALUE
         for (offset in -range..range) {
             val curr = index + offset; if (curr < 0 || curr >= data.size - 1) continue
@@ -61,9 +61,9 @@ object AudioUtils {
 
     fun findOnsetPeaks(flux: List<Double>, numBeats: Int = 4): List<Int> {
         if (flux.isEmpty()) return emptyList()
-        val threshold = flux.average() * 4.0;
-        val minGap = 25;
-        val candidates = mutableListOf<Pair<Int, Double>>();
+        val threshold = flux.average() * 4.0
+        val minGap = 25
+        val candidates = mutableListOf<Pair<Int, Double>>()
         var lastPeak = -minGap
         for (i in 1 until flux.size - 1) {
             if (flux[i] > threshold && flux[i] > flux[i - 1] && flux[i] > flux[i + 1]) {
@@ -75,44 +75,6 @@ object AudioUtils {
             }
         }
         return candidates.sortedByDescending { it.second }.take(40).map { it.first }.sorted()
-    }
-
-    fun calculateRawSimilarity(
-        data: ShortArray,
-        posA: Int,
-        posB: Int,
-        length: Int,
-        step: Int = 1
-    ): Double {
-        if (posA < 0 || posB < 0 || posA + length > data.size || posB + length > data.size) return 0.0
-        var sumA = 0.0;
-        var sumB = 0.0;
-        var count = 0
-        for (i in 0 until length step step) {
-            sumA += data[posA + i]; sumB += data[posB + i]; count++
-        }
-        val meanA = sumA / count;
-        val meanB = sumB / count
-        var dot = 0.0;
-        var varA = 0.0;
-        var varB = 0.0
-        for (i in 0 until length step step) {
-            val vA = data[posA + i] - meanA;
-            val vB = data[posB + i] - meanB
-            dot += vA * vB; varA += vA * vA; varB += vB * vB
-        }
-        val den = sqrt(varA) * sqrt(varB); return if (den > 0) dot / den else 0.0
-    }
-
-    fun calculateRMS(data: ShortArray, start: Int, length: Int): Double {
-        if (start < 0 || start + length > data.size || length <= 0) return 0.0
-        var sumSq = 0.0;
-        val step = (length / 1000).coerceAtLeast(1);
-        var count = 0
-        for (i in start until (start + length) step step) {
-            val v = data[i].toDouble(); sumSq += v * v; count++
-        }
-        return sqrt(sumSq / count)
     }
 
     fun calculateComplexNovelty(data: ShortArray, winSize: Int, stepSize: Int): List<Double> {

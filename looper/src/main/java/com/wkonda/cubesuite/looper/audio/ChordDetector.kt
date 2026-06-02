@@ -18,7 +18,7 @@ class ChordDetector {
     }
 
     private fun createTemplate(semitones: List<Int>): DoubleArray {
-        val t = DoubleArray(12) { 0.0 }
+        val t = DoubleArray(12)
         semitones.forEach { t[it] = 1.0 }
         return t
     }
@@ -42,7 +42,7 @@ class ChordDetector {
         val smoothed = List(chromas.size) { i ->
             val c = DoubleArray(12) { 0.0 }
             val w = 9
-            val start = (i - w / 2).coerceAtLeast(0)
+            val start = (i - (w / 2)).coerceAtLeast(0)
             val end = (i + w / 2).coerceAtMost(chromas.size - 1)
             for (j in start..end) {
                 for (k in 0 until 12) c[k] += chromas[j][k]
@@ -89,7 +89,7 @@ class ChordDetector {
             ChordRegion(
                 startF * stepSize,
                 frameLabels.size * stepSize,
-                current
+                current,
             )
         )
 

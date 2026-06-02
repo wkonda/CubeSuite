@@ -25,7 +25,7 @@ class LoopRepository(context: Context) {
         sig: String,
         bars: Int
     ) = withContext(Dispatchers.IO) {
-        val id = System.currentTimeMillis().toString();
+        val id = System.currentTimeMillis().toString()
         val file = File(dir, "$id.pcm")
         FileOutputStream(file).use { fos ->
             val buf = ByteBuffer.allocate(data.size * 2).order(ByteOrder.LITTLE_ENDIAN)
@@ -61,22 +61,23 @@ class LoopRepository(context: Context) {
                 if (o.has("bpm")) o.getDouble("bpm") else null,
                 o.optString("sig", "4/4"),
                 o.optInt("bars", 4),
-                o.optInt("rate", LooperConfig.SAMPLE_RATE)
+                o.optInt("rate", LooperConfig.SAMPLE_RATE),
             )
         }
     }
 
     suspend fun loadLoopData(meta: LoopMetadata) = withContext(Dispatchers.IO) {
-        val file = File(dir, meta.fileName);
+        val file = File(dir, meta.fileName)
         val bytes = ByteArray(file.length().toInt())
         FileInputStream(file).use { it.read(bytes) }
         ShortArray(bytes.size / 2).also {
-            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(it)
+            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()[it]
         }
     }
 
     suspend fun deleteLoop(meta: LoopMetadata) = withContext(Dispatchers.IO) {
-        File(dir, meta.fileName).delete(); saveManifest(getAllLoops().filter { it.id != meta.id })
+        File(dir, meta.fileName).delete()
+        saveManifest(getAllLoops().filter { it.id != meta.id })
     }
 
     suspend fun updateLoop(meta: LoopMetadata) = withContext(Dispatchers.IO) {
@@ -86,17 +87,20 @@ class LoopRepository(context: Context) {
     private fun saveManifest(loops: List<LoopMetadata>) {
         val arr = JSONArray()
         loops.forEach {
-            arr.put(JSONObject().apply {
-                put("id", it.id); put("name", it.name); put("file", it.fileName)
-                put("start", it.startSample); put("end", it.endSample); put(
-                "total",
-                it.totalSamples
+            arr.put(
+                JSONObject().apply {
+                    put("id", it.id)
+                    put("name", it.name)
+                    put("file", it.fileName)
+                    put("start", it.startSample)
+                    put("end", it.endSample)
+                    put("total", it.totalSamples)
+                    put("bpm", it.bpm ?: JSONObject.NULL)
+                    put("sig", it.timeSignature)
+                    put("bars", it.bars)
+                    put("rate", it.sampleRate)
+                }
             )
-                put("bpm", it.bpm ?: JSONObject.NULL); put("sig", it.timeSignature); put(
-                "bars",
-                it.bars
-            ); put("rate", it.sampleRate)
-            })
         }
         manifest.writeText(arr.toString())
     }

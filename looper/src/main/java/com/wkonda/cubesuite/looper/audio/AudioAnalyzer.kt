@@ -44,7 +44,8 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
         val onsetSamples = c.onsets.map { it * step }
         val snappedS = if (loopStart == 0) AudioUtils.findNearestZeroCrossing(
             data,
-            onsetSamples.firstOrNull { it > sampleRate / 10 } ?: 0) else loopStart
+            onsetSamples.firstOrNull { it > sampleRate / 10 } ?: 0
+        ) else loopStart
         val refLen = (5.0 * sampleRate).toInt()
         val maxNovelty = c.novelty.maxOrNull()?.coerceAtLeast(1e-6) ?: 1.0
         for (i in c.novelty.indices) rhythmicCurve.add((i * step) to (c.novelty[i] / maxNovelty))
@@ -69,15 +70,15 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
                 val tFrame = t / step
                 var specSim = 0.0
                 if (tFrame + refSpec.size <= c.spec.size) {
-                    var dot = 0.0;
-                    var n1 = 0.0;
+                    var dot = 0.0
+                    var n1 = 0.0
                     var n2 = 0.0
                     for (i in 0 until refSpec.size step 4) {
-                        val s1 = refSpec[i];
+                        val s1 = refSpec[i]
                         val s2 = c.spec[tFrame + i]
                         for (b in s1.indices) {
-                            val w = if (b < 15) 1.5 else 0.5;
-                            val v1 = s1[b] * w;
+                            val w = if (b < 15) 1.5 else 0.5
+                            val v1 = s1[b] * w
                             val v2 = s2[b] * w
                             dot += v1 * v2; n1 += v1 * v1; n2 += v2 * v2
                         }
@@ -125,8 +126,8 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
 
     private fun getOrCompute(data: ShortArray, beats: Int): Cache {
         val h = data.contentHashCode(); cache?.let { if (it.hash == h) return it }
-        val win = LooperConfig.FFT_WINDOW_SIZE;
-        val step = LooperConfig.FFT_STEP_SIZE;
+        val win = LooperConfig.FFT_WINDOW_SIZE
+        val step = LooperConfig.FFT_STEP_SIZE
         val bR = sampleRate.toDouble() / win
         val spec = List((data.size - win) / step) { i ->
             val buf = DoubleArray(win * 2); for (j in 0 until win) buf[j * 2] =
@@ -134,10 +135,10 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
                 4 * PI * j / (win - 1)
             ) - 0.01168 * cos(6 * PI * j / (win - 1)))
             AudioUtils.fft(buf); List(49) { bI ->
-            val midi = 36 + bI;
-            val low = 440.0 * 2.0.pow((midi - 0.5 - 69.0) / 12.0);
+            val midi = 36 + bI
+            val low = 440.0 * 2.0.pow((midi - 0.5 - 69.0) / 12.0)
             val high = 440.0 * 2.0.pow((midi + 0.5 - 69.0) / 12.0)
-            val bS = max(0, round(low / bR).toInt());
+            val bS = max(0, round(low / bR).toInt())
             val bE = min(win / 2, round(high / bR).toInt())
             var maxM = 0.0; for (k in bS until bE) {
             val m = sqrt(buf[k * 2].pow(2) + buf[k * 2 + 1].pow(2)); if (m > maxM) maxM = m
@@ -146,8 +147,8 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
         }
         val flux = List(spec.size) { t ->
             if (t == 0) 0.0 else {
-                var f = 0.0;
-                val s1 = spec[t];
+                var f = 0.0
+                val s1 = spec[t]
                 val s2 = spec[t - 1]; for (b in 0 until 12) {
                     val d = s1[b] - s2[b]; if (d > 0) f += d
                 }; f
@@ -163,7 +164,7 @@ class AudioAnalyzer(private val sampleRate: Int = LooperConfig.SAMPLE_RATE) {
     }
 
     fun getSpectrogram(data: ShortArray): List<List<Double>> {
-        if (data.isEmpty()) return emptyList();
+        if (data.isEmpty()) return emptyList()
         val c = getOrCompute(data, 4)
         return List(600) { i ->
             c.spec[(i.toDouble() / 600 * c.spec.size).toInt().coerceIn(c.spec.indices)].subList(
