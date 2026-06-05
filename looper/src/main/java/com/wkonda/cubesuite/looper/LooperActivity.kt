@@ -216,13 +216,13 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 "ANALYZE",
                 { vm.analyze() },
                 Modifier.weight(1.5f),
-                s.recordingData != null && !s.isPlaying && !s.isRecording
+                s.recordingData != null && !s.isPlaying && !s.isRecording && !s.isAnalyzing
             )
             Btn(
                 if (s.activeLoop != null) "UPDATE" else "SAVE",
                 { if (s.activeLoop != null) vm.saveOrUpdate() else vm.showSave() },
                 Modifier.weight(1.5f),
-                s.recordingData != null && !s.isPlaying && !s.isRecording
+                s.recordingData != null && !s.isPlaying && !s.isRecording && !s.isAnalyzing
             )
             if (s.recordingData != null) {
                 Adj(
