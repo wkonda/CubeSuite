@@ -17,15 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Canvas
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.wkonda.cubesuite.ui.theme.AppDarkBackground
-import com.wkonda.cubesuite.ui.theme.CyanAccent
+import com.wkonda.cubesuite.looper.audio.LooperConfig
+import com.wkonda.cubesuite.ui.theme.AccentCyan
+import com.wkonda.cubesuite.ui.theme.DarkBackground
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -39,43 +39,46 @@ fun WaveformView(
     pos: Int = 0,
     playing: Boolean = false,
     recording: Boolean = false,
-    beatGrid: List<Int> = emptyList(),
+    totalBeats: Int = 16,
     correlationCurve: List<Pair<Int, Double>> = emptyList(),
     rhythmicCurve: List<Pair<Int, Double>> = emptyList(),
+    signature: Pair<Int, Int> = 4 to 4
 ) {
     if (data == null) return
-    var size by remember { mutableStateOf(value = IntSize.Zero) }
+    var size by remember { mutableStateOf(IntSize.Zero) };
     var handle by remember { mutableIntStateOf(-1) }
-    val curS by rememberUpdatedState(newValue = start);
-    val curE by rememberUpdatedState(newValue = end)
-    val windowSize = 5 * 48000;
+    val curS by rememberUpdatedState(start);
+    val curE by rememberUpdatedState(end)
+    val windowSize = 5 * LooperConfig.SAMPLE_RATE;
     val isWindowed = recording && data.size > windowSize
     val dataOffset = if (isWindowed) data.size - windowSize else 0;
     val displaySize = if (isWindowed) windowSize else data.size
 
     Box(Modifier
         .fillMaxSize()
-        .background(AppDarkBackground)
+        .background(DarkBackground)
         .onSizeChanged { size = it }
         .drawWithCache {
-            val (w, h) = this.size
-            if (w <= 0 || h <= 0) onDrawBehind {} else {
-                val bitmap = ImageBitmap(w.toInt(), h.toInt())
-                CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
-                    val midY = h / 2;
-                    val step = max(1, displaySize / w.toInt())
-                    for (i in 0 until w.toInt()) {
-                        val idx = dataOffset + i * step; if (idx >= data.size) break
-                        val lh = (data[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
-                        drawLine(
-                            CyanAccent.copy(0.4f),
-                            Offset(i.toFloat(), midY - lh),
-                            Offset(i.toFloat(), midY + lh)
-                        )
-                    }
+            val (w, h) = this.size; if (w <= 0 || h <= 0) onDrawBehind {} else {
+            val bitmap = ImageBitmap(w.toInt(), h.toInt()); CanvasDrawScope().draw(
+                this,
+                layoutDirection,
+                Canvas(bitmap),
+                this.size
+            ) {
+                val midY = h / 2;
+                val step = max(1, displaySize / w.toInt())
+                for (i in 0 until w.toInt()) {
+                    val idx = dataOffset + i * step; if (idx >= data.size) break
+                    val lh = (data[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
+                    drawLine(
+                        AccentCyan.copy(0.4f),
+                        Offset(i.toFloat(), midY - lh),
+                        Offset(i.toFloat(), midY + lh)
+                    )
                 }
-                onDrawBehind { drawImage(bitmap) }
-            }
+            }; onDrawBehind { drawImage(bitmap) }
+        }
         }
         .pointerInput(data.size, playing, recording) {
             if (playing || recording) return@pointerInput
@@ -90,8 +93,7 @@ fun WaveformView(
                 if (handle != -1) {
                     while (true) {
                         val ev = awaitPointerEvent();
-                        val ch = ev.changes.firstOrNull() ?: break
-                        if (!ch.pressed) break
+                        val ch = ev.changes.firstOrNull() ?: break; if (!ch.pressed) break
                         val n = (ch.position.x * data.size / w).toInt()
                         if (handle == 0) onStart(
                             n.coerceIn(
@@ -100,86 +102,16 @@ fun WaveformView(
                             )
                         ) else onEnd(n.coerceIn(curS + 100, data.size))
                         ch.consume()
-                    }
-                    handle = -1
+                    }; handle = -1
                 }
             }
         }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
             val h = size.height.toFloat(); if (w <= 0 || h <= 0 || recording) return@Canvas
-            val sX = curS.toDouble() * w / data.size;
-            val eX = curE.toDouble() * w / data.size
-            val darkRed = Color(0xFF8B0000);
-            val stroke = 2.5.dp.toPx();
-            val halfS = stroke / 2f
-            val drawSX = sX.toFloat().coerceIn(halfS, w - halfS);
-            val drawEX = eX.toFloat().coerceIn(halfS, w - halfS)
-            drawLine(
-                if (handle == 0) Color.White else darkRed,
-                Offset(drawSX, 0f),
-                Offset(drawSX, h),
-                stroke
-            )
-            drawLine(
-                if (handle == 1) Color.White else darkRed,
-                Offset(drawEX, 0f),
-                Offset(drawEX, h),
-                stroke
-            )
-            if (playing) {
-                val cX = (curS + pos) * w / data.size; if (cX in 0f..w) drawLine(
-                    Color.White,
-                    Offset(cX, 0f),
-                    Offset(cX, h),
-                    1.dp.toPx()
-                )
-            }
-            beatGrid.forEach { b ->
-                val bX = b * w / data.size; if (bX in 0f..w) drawLine(
-                darkRed.copy(0.6f),
-                Offset(bX, 0f),
-                Offset(bX, h),
-                1.dp.toPx()
-            )
-            }
-            if (rhythmicCurve.isNotEmpty()) {
-                val path = androidx.compose.ui.graphics.Path()
-                rhythmicCurve.forEachIndexed { i, p ->
-                    val x = p.first.toFloat() * w / data.size;
-                    val y = h - (p.second.toFloat() * h * 0.4f)
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                drawPath(
-                    path,
-                    Color(0xFF44AAFF),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
-                )
-            }
-            if (correlationCurve.isNotEmpty()) {
-                val path = androidx.compose.ui.graphics.Path();
-                val minSim = correlationCurve.minOf { it.second }.toFloat();
-                val maxSim = correlationCurve.maxOf { it.second }.toFloat();
-                val range = (maxSim - minSim).coerceAtLeast(0.01f);
-                var lastX = -1f
-                correlationCurve.forEach { p ->
-                    val x = p.first.toFloat() * w / data.size;
-                    val normY = (p.second.toFloat() - minSim) / range;
-                    val y = (h * 0.1f) + (1f - normY) * (h * 0.5f)
-                    if (lastX == -1f || abs(x - lastX) > (2048f * w / data.size)) path.moveTo(
-                        x,
-                        y
-                    ) else path.lineTo(x, y); lastX = x
-                }
-                drawPath(
-                    path,
-                    Color.Yellow,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 1f,
-                        pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(radius = 4.dp.toPx())
-                    )
-                )
-            }
+            drawLoopGrid(curS, curE, data.size, totalBeats, signature, handle)
+            if (playing) drawPlaybackLine(pos, curS, data.size)
+            drawAnalysisCurves(rhythmicCurve, correlationCurve, data.size)
         }
     }
 }

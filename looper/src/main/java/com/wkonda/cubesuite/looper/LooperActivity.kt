@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -57,11 +58,12 @@ import com.wkonda.cubesuite.looper.data.LoopRepository
 import com.wkonda.cubesuite.looper.ui.ChromaVisualizer
 import com.wkonda.cubesuite.looper.ui.LoopListScreen
 import com.wkonda.cubesuite.looper.ui.WaveformView
-import com.wkonda.cubesuite.ui.theme.AppDarkBackground
+import com.wkonda.cubesuite.ui.theme.AccentCyan
 import com.wkonda.cubesuite.ui.theme.CubeSuiteTheme
-import com.wkonda.cubesuite.ui.theme.CyanAccent
-import com.wkonda.cubesuite.ui.theme.ModTrackRed
-import com.wkonda.cubesuite.ui.theme.TextGrayBox
+import com.wkonda.cubesuite.ui.theme.DarkBackground
+import com.wkonda.cubesuite.ui.theme.SurfaceGray
+import com.wkonda.cubesuite.ui.theme.TrackRed
+import com.wkonda.cubesuite.ui.theme.White
 import java.util.Locale
 
 class LooperActivity : ComponentActivity() {
@@ -69,21 +71,21 @@ class LooperActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) window.attributes.layoutInDisplayCutoutMode =
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE; hide(
+            WindowInsetsCompat.Type.systemBars()
+        )
         }
-        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-        windowInsetsController.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
         setContent {
             CubeSuiteTheme {
-                val s by vm.uiState.collectAsState()
-                Surface(color = AppDarkBackground, modifier = Modifier.fillMaxSize()) {
-                    if (s.screen == "looper") LooperScreen(s, vm) else LibraryScreen(s, vm)
-                }
+                val s by vm.uiState.collectAsState(); Surface(
+                color = DarkBackground,
+                modifier = Modifier.fillMaxSize()
+            ) { if (s.screen == "looper") LooperScreen(s, vm) else LibraryScreen(s, vm) }
             }
         }
     }
@@ -91,22 +93,19 @@ class LooperActivity : ComponentActivity() {
 
 @Composable
 fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
-    var sigMenuExpanded by remember { mutableStateOf(value = false) }
-    var barsMenuExpanded by remember { mutableStateOf(value = false) }
-    val sigs = listOf(4 to 4, 3 to 4, 6 to 8, 2 to 4, 5 to 4)
-
+    var sigMenu by remember { mutableStateOf(false) };
+    var barsMenu by remember { mutableStateOf(false) }
     Column(Modifier
         .fillMaxSize()
-        .background(AppDarkBackground)
+        .background(DarkBackground)
         .padding(8.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
-                val currentBpm = s.bpm
-                if (currentBpm != null && currentBpm > 0) {
+                Text("CUBE LOOPER", color = AccentCyan, fontWeight = FontWeight.Bold)
+                s.bpm?.let { bpm ->
                     Text(
-                        "  |  ${String.format(Locale.US, "%.1f", currentBpm)} BPM",
-                        color = if (s.isRecording) ModTrackRed else Color.Gray,
+                        "  |  ${String.format(Locale.US, "%.1f", bpm)} BPM",
+                        color = if (s.isRecording) TrackRed else Color.Gray,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (s.isRecording) FontWeight.Bold else FontWeight.Normal
                     )
@@ -116,51 +115,37 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                             color = Color.Gray,
                             style = MaterialTheme.typography.bodySmall
                         )
-                        Box {
-                            Text(
-                                text = "${s.bars} bars",
-                                color = CyanAccent,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.clickable { barsMenuExpanded = true })
-                            DropdownMenu(
-                                expanded = barsMenuExpanded,
-                                onDismissRequest = { barsMenuExpanded = false },
-                                modifier = Modifier.background(TextGrayBox)
-                            ) {
-                                (1..16).forEach { b ->
-                                    DropdownMenuItem(text = {
-                                        Text(
-                                            "$b bars",
-                                            color = CyanAccent
-                                        )
-                                    }, onClick = { vm.setUserBars(b); barsMenuExpanded = false })
-                                }
+                        MenuSelector(
+                            "${s.bars} bars",
+                            barsMenu,
+                            { barsMenu = it }) {
+                            (1..16).forEach { b ->
+                                DropdownMenuItem(text = {
+                                    Text(
+                                        "$b bars",
+                                        color = AccentCyan
+                                    )
+                                }, onClick = { vm.setUserBars(b); barsMenu = false })
                             }
                         }
                         Text(" of ", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                        Box {
-                            Text(
-                                text = "${s.signature.first}/${s.signature.second}",
-                                color = CyanAccent,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.clickable { sigMenuExpanded = true })
-                            DropdownMenu(
-                                expanded = sigMenuExpanded,
-                                onDismissRequest = { sigMenuExpanded = false },
-                                modifier = Modifier.background(TextGrayBox)
-                            ) {
-                                sigs.forEach { (n, d) ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "$n/$d",
-                                                color = CyanAccent
-                                            )
-                                        },
-                                        onClick = {
-                                            vm.setUserSignature(n, d); sigMenuExpanded = false
-                                        })
-                                }
+                        MenuSelector(
+                            "${s.signature.first}/${s.signature.second}",
+                            sigMenu,
+                            { sigMenu = it }) {
+                            listOf(
+                                4 to 4,
+                                3 to 4,
+                                6 to 8,
+                                2 to 4,
+                                5 to 4
+                            ).forEach { (n, d) ->
+                                DropdownMenuItem(text = {
+                                    Text(
+                                        "$n/$d",
+                                        color = AccentCyan
+                                    )
+                                }, onClick = { vm.setUserSignature(n, d); sigMenu = false })
                             }
                         }
                     }
@@ -170,31 +155,8 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
-                    { vm.toggleView() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = TextGrayBox,
-                        contentColor = CyanAccent
-                    ),
-                    shape = RoundedCornerShape(4.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    Text(
-                        if (s.showChromagram) "WAVE" else "CHROMA",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                Button(
-                    { vm.setScreen("library") },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = TextGrayBox,
-                        contentColor = CyanAccent
-                    ),
-                    shape = RoundedCornerShape(4.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp)
-                ) {
-                    Text("LIBRARY", style = MaterialTheme.typography.labelSmall)
-                }
+                TopBtn(if (s.showChromagram) "WAVE" else "CHROMA") { vm.toggleView() }
+                TopBtn("LIBRARY") { vm.setScreen("library") }
             }
         }
         Box(
@@ -202,7 +164,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
-                .border(1.dp, TextGrayBox, RoundedCornerShape(4.dp))
+                .border(1.dp, SurfaceGray, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
         ) {
             if (s.showChromagram) ChromaVisualizer(
@@ -215,9 +177,10 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 Modifier.fillMaxSize(),
                 s.playbackPosition,
                 s.isPlaying,
-                s.beatGrid,
+                s.totalBeats,
                 s.correlationCurve,
-                s.rhythmicCurve
+                s.rhythmicCurve,
+                s.signature
             )
             else WaveformView(
                 s.recordingData,
@@ -228,9 +191,10 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 s.playbackPosition,
                 s.isPlaying,
                 s.isRecording,
-                s.beatGrid,
+                s.totalBeats,
                 s.correlationCurve,
-                s.rhythmicCurve
+                s.rhythmicCurve,
+                s.signature
             )
         }
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
@@ -252,13 +216,13 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 "ANALYZE",
                 { vm.analyze() },
                 Modifier.weight(1.5f),
-                (s.recordingData != null && (!s.isPlaying) && (!s.isRecording))
+                s.recordingData != null && !s.isPlaying && !s.isRecording
             )
             Btn(
                 if (s.activeLoop != null) "UPDATE" else "SAVE",
                 { if (s.activeLoop != null) vm.saveOrUpdate() else vm.showSave() },
                 Modifier.weight(1.5f),
-                (s.recordingData != null && (!s.isPlaying) && (!s.isRecording))
+                s.recordingData != null && !s.isPlaying && !s.isRecording
             )
             if (s.recordingData != null) {
                 Adj(
@@ -283,7 +247,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
         confirmButton = {
             Button(
                 onClick = { vm.saveOrUpdate() },
-                colors = ButtonDefaults.buttonColors(contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(contentColor = White)
             ) { Text("Save") }
         },
         title = { Text("Save") },
@@ -299,10 +263,40 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
 }
 
 @Composable
+fun MenuSelector(
+    label: String,
+    expanded: Boolean,
+    onToggle: (Boolean) -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box {
+        Text(
+            text = label,
+            color = AccentCyan,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.clickable { onToggle(true) })
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onToggle(false) },
+            modifier = Modifier.background(SurfaceGray),
+            content = content
+        )
+    }
+}
+
+@Composable
+fun TopBtn(text: String, onClick: () -> Unit) = Button(
+    onClick,
+    colors = ButtonDefaults.buttonColors(containerColor = SurfaceGray, contentColor = AccentCyan),
+    shape = RoundedCornerShape(4.dp),
+    contentPadding = PaddingValues(horizontal = 8.dp)
+) { Text(text, style = MaterialTheme.typography.labelSmall) }
+
+@Composable
 fun LibraryScreen(s: LooperUiState, vm: LooperViewModel) {
     Column(Modifier
         .fillMaxSize()
-        .background(AppDarkBackground)) {
+        .background(DarkBackground)) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -310,7 +304,7 @@ fun LibraryScreen(s: LooperUiState, vm: LooperViewModel) {
             Arrangement.SpaceBetween,
             Alignment.CenterVertically
         ) {
-            Text("LIBRARY", color = CyanAccent, fontWeight = FontWeight.Bold)
+            Text("LIBRARY", color = AccentCyan, fontWeight = FontWeight.Bold)
             Text(
                 "CLOSE",
                 color = Color.Gray,
@@ -333,9 +327,9 @@ fun Btn(
         modifier = modifier.height(40.dp),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (active) ModTrackRed else TextGrayBox,
-            contentColor = if (active) Color.White else CyanAccent,
-            disabledContainerColor = TextGrayBox,
+            containerColor = if (active) TrackRed else SurfaceGray,
+            contentColor = if (active) White else AccentCyan,
+            disabledContainerColor = SurfaceGray,
             disabledContentColor = Color.Gray
         ),
         shape = RoundedCornerShape(4.dp),
@@ -353,12 +347,11 @@ fun Adj(
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val step = (LooperConfig.SAMPLE_RATE * 0.002).toInt();
-    val seconds = value.toDouble() / LooperConfig.SAMPLE_RATE
+    val step = (LooperConfig.SAMPLE_RATE * 0.002).toInt()
     Surface(
         modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(4.dp),
-        color = TextGrayBox
+        color = SurfaceGray
     ) {
         Row(
             Modifier.padding(horizontal = 4.dp),
@@ -370,11 +363,11 @@ fun Adj(
                 onClick = { onValueChange((value - step).coerceAtLeast(0)) },
                 modifier = Modifier.size(24.dp),
                 enabled = enabled
-            ) { Text("-", color = if (enabled) CyanAccent else Color.Gray) }
+            ) { Text("-", color = if (enabled) AccentCyan else Color.Gray) }
             Text(
-                String.format(Locale.US, "%.3f", seconds),
+                String.format(Locale.US, "%.3f", value.toDouble() / LooperConfig.SAMPLE_RATE),
                 Modifier.weight(1f),
-                if (enabled) CyanAccent else Color.Gray,
+                if (enabled) AccentCyan else Color.Gray,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -382,7 +375,7 @@ fun Adj(
                 onClick = { onValueChange(value + step) },
                 modifier = Modifier.size(24.dp),
                 enabled = enabled
-            ) { Text("+", color = if (enabled) CyanAccent else Color.Gray) }
+            ) { Text("+", color = if (enabled) AccentCyan else Color.Gray) }
         }
     }
 }

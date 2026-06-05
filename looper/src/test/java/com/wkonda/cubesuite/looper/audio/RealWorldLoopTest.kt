@@ -22,7 +22,7 @@ class RealWorldLoopTest {
             .split("},{")
             .map { it.removeSurrounding("{", "}") }
 
-        val analyzer = AudioAnalyzer(48000)
+        val analyzer = AudioAnalyzer(LooperConfig.SAMPLE_RATE)
 
         entries.forEach { entry ->
             val fields = entry.split(",")
@@ -42,7 +42,7 @@ class RealWorldLoopTest {
             val shortData = ShortArray(bytes.size / 2)
             ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shortData)
 
-            val result = analyzer.analyze(shortData, 0, 4)
+            val result = analyzer.analyze(shortData, 0, 16)
 
             assertTrue(
                 "AI should have found a valid end point after start",

@@ -15,52 +15,50 @@ class LooperEngine {
     private val sR = LooperConfig.SAMPLE_RATE
     private val enc = AudioFormat.ENCODING_PCM_16BIT
     private val bS = AudioRecord.getMinBufferSize(sR, AudioFormat.CHANNEL_IN_MONO, enc)
-
     private var rec: AudioRecord? = null
     private var track: AudioTrack? = null
     private var isR = false
-
     private val _data = MutableStateFlow<ShortArray?>(null)
     val recordingData: StateFlow<ShortArray?> = _data
-
     private val _pos = MutableStateFlow(0)
     val playbackPosition: StateFlow<Int> = _pos
-
     private var curD: ShortArray? = null
-    private var sS = 0
-    var eS = 0
+    private var sS = 0;
+    private var eS = 0
 
     @SuppressLint("MissingPermission")
     suspend fun startRecording() = withContext(Dispatchers.IO) {
         rec = AudioRecord(MediaRecorder.AudioSource.MIC, sR, AudioFormat.CHANNEL_IN_MONO, enc, bS)
-        val maxSamples = LooperConfig.MAX_RECORD_SAMPLES
+        val maxSamples = LooperConfig.MAX_RECORD_SAMPLES;
         val recordingBuffer = ShortArray(maxSamples)
-        var writeIndex = 0
-        var bufferFull = false
+        var writeIndex = 0;
+        var bufferFull = false;
         val buf = ShortArray(bS)
-        rec?.startRecording(); isR = true
+        rec?.startRecording(); isR = true;
         var lastUpdate = 0L
         while (isR) {
             val r = rec?.read(buf, 0, bS) ?: 0
             if (r > 0) {
                 for (i in 0 until r) {
-                    recordingBuffer[writeIndex] = buf[i]
-                    writeIndex++
+                    recordingBuffer[writeIndex] = buf[i]; writeIndex++
                     if (writeIndex >= maxSamples) {
-                        writeIndex = 0
-                        bufferFull = true
+                        writeIndex = 0; bufferFull = true
                     }
                 }
                 val now = System.currentTimeMillis()
-                if ((now - lastUpdate) > 100) {
-                    _data.value = getSnapshot(recordingBuffer, writeIndex, bufferFull, maxSamples)
-                    lastUpdate = now
+                if (now - lastUpdate > 100) {
+                    _data.value = getSnapshot(
+                        recordingBuffer,
+                        writeIndex,
+                        bufferFull,
+                        maxSamples
+                    ); lastUpdate = now
                 }
             }
         }
-        rec?.stop(); rec?.release(); rec = null
-        curD = getSnapshot(recordingBuffer, writeIndex, bufferFull, maxSamples)
-        sS = 0; eS = curD?.size ?: 0; _data.value = curD
+        rec?.apply { stop(); release() }; rec = null
+        curD = getSnapshot(recordingBuffer, writeIndex, bufferFull, maxSamples); sS = 0; eS =
+        curD?.size ?: 0; _data.value = curD
     }
 
     private fun getSnapshot(
@@ -69,13 +67,17 @@ class LooperEngine {
         full: Boolean,
         max: Int
     ): ShortArray {
-        val size = if (full) max else writeIndex
+        val size = if (full) max else writeIndex;
         val result = ShortArray(size)
-        if (!full) {
-            System.arraycopy(buffer, 0, result, 0, writeIndex)
-        } else {
-            System.arraycopy(buffer, writeIndex, result, 0, max - writeIndex)
-            System.arraycopy(buffer, 0, result, max - writeIndex, writeIndex)
+        if (!full) System.arraycopy(buffer, 0, result, 0, writeIndex)
+        else {
+            System.arraycopy(buffer, writeIndex, result, 0, max - writeIndex); System.arraycopy(
+                buffer,
+                0,
+                result,
+                max - writeIndex,
+                writeIndex
+            )
         }
         return result
     }
@@ -91,9 +93,10 @@ class LooperEngine {
     suspend fun startPlayback() = withContext(Dispatchers.IO) {
         val d = curD ?: return@withContext
         if (sS >= eS || eS > d.size) return@withContext
-        val len = eS - sS
-        val xL = (sR * LooperConfig.CROSSFADE_MS / 1000).coerceAtMost(len / 4)
-        val buf = ShortArray(len); System.arraycopy(d, sS, buf, 0, len)
+        val len = eS - sS;
+        val xL = (sR * LooperConfig.CROSSFADE_MS / 1000).coerceAtMost(len / 4);
+        val buf = ShortArray(len)
+        System.arraycopy(d, sS, buf, 0, len)
         for (i in 0 until xL) {
             val r = i.toDouble() / xL;
             val eI = len - xL + i
@@ -102,20 +105,19 @@ class LooperEngine {
         }
         track = AudioTrack.Builder().setAudioAttributes(
             AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build(),
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
         )
             .setAudioFormat(
                 AudioFormat.Builder().setEncoding(enc).setSampleRate(sR)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
             )
             .setBufferSizeInBytes(len * 2).setTransferMode(AudioTrack.MODE_STATIC).build()
-        track?.write(buf, 0, len); track?.setLoopPoints(0, len, -1); track?.play()
+        track?.apply { write(buf, 0, len); setLoopPoints(0, len, -1); play() }
     }
 
     fun stopPlayback() {
-        track?.stop(); track?.release(); track = null; _pos.value = 0
+        track?.apply { stop(); release() }; track = null; _pos.value = 0
     }
-
     fun getPlaybackHeadPosition() = track?.playbackHeadPosition ?: 0
     fun updatePlaybackPosition(p: Int) {
         _pos.value = p

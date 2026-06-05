@@ -6,9 +6,7 @@ import java.util.ArrayDeque
 class PerformanceTest {
     @Test
     fun testArrayDequeConversionPerformance() {
-        val sampleRate = 48000
-        val maxMinutes = 2
-        val maxSamples = sampleRate * 60 * maxMinutes
+        val maxSamples = LooperConfig.MAX_RECORD_SAMPLES
         val list = ArrayDeque<Short>(maxSamples)
 
         println("Filling ArrayDeque with $maxSamples samples...")

@@ -5,10 +5,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
 private val DarkColorScheme = darkColorScheme(
-    primary = ModTrackRed,
-    secondary = CyanDark,
-    tertiary = ModThumbGray,
-    background = AppDarkBackground,
+    primary = TrackRed,
+//    secondary = DarkCyan,
+//    tertiary = ThumbGray,
+    background = DarkBackground,
 )
 
 @Composable

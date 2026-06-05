@@ -22,14 +22,14 @@ object AudioUtils {
         }
         var len = 2
         while (len <= n) {
-            val ang = -2.0 * PI / len
-            val wlr = cos(ang)
+            val ang = -2.0 * PI / len;
+            val wlr = cos(ang);
             val wli = sin(ang)
             for (i in 0 until n step len) {
-                var wr = 1.0
+                var wr = 1.0;
                 var wi = 0.0
                 for (k in 0 until len / 2) {
-                    val u = (i + k) * 2
+                    val u = (i + k) * 2;
                     val v = (i + k + len / 2) * 2
                     val tr = wr * complexData[v] - wi * complexData[v + 1]
                     val ti = wr * complexData[v + 1] + wi * complexData[v]
@@ -44,8 +44,8 @@ object AudioUtils {
     }
 
     fun findNearestZeroCrossing(data: ShortArray, index: Int): Int {
-        val range = LooperConfig.ZERO_CROSSING_SEARCH_RANGE
-        var bestIdx = index
+        val range = LooperConfig.ZERO_CROSSING_SEARCH_RANGE;
+        var bestIdx = index;
         var minDistance = Int.MAX_VALUE
         for (offset in -range..range) {
             val curr = index + offset; if (curr < 0 || curr >= data.size - 1) continue
@@ -58,11 +58,11 @@ object AudioUtils {
         return bestIdx
     }
 
-    fun findOnsetPeaks(flux: List<Double>, numBeats: Int = 4): List<Int> {
+    fun findOnsetPeaks(flux: List<Double>): List<Int> {
         if (flux.isEmpty()) return emptyList()
-        val threshold = flux.average() * 4.0
-        val minGap = 25
-        val candidates = mutableListOf<Pair<Int, Double>>()
+        val threshold = flux.average() * 4.0;
+        val minGap = 25;
+        val candidates = mutableListOf<Pair<Int, Double>>();
         var lastPeak = -minGap
         for (i in 1 until flux.size - 1) {
             if (flux[i] > threshold && flux[i] > flux[i - 1] && flux[i] > flux[i + 1]) {
@@ -75,7 +75,6 @@ object AudioUtils {
         }
         return candidates.sortedByDescending { it.second }.take(40).map { it.first }.sorted()
     }
-
 
     fun findBestRhythmicSnap(data: ShortArray, targetIdx: Int, onsets: List<Int>): Int {
         val neighborhood = LooperConfig.SAMPLE_RATE / 10

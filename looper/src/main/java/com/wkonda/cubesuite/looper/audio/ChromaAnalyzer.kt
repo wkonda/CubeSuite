@@ -9,12 +9,12 @@ class ChromaAnalyzer {
             val chroma = DoubleArray(12) { 0.0 }
             val maxDb = frame.maxOrNull() ?: -100.0
             if (maxDb < -65.0) return@map List(12) { 0.0 }
-            for (bin in 0 until 49) {
+            for (bin in 0 until 51) {
                 val db = frame[bin]
-                val pc = (38 + bin) % 12
+                val pc = (36 + bin) % 12
                 val weight = when {
-                    bin < 12 -> 0.6
-                    bin < 37 -> 2.0
+                    bin < 14 -> 0.6
+                    bin < 39 -> 2.0
                     else -> 0.3
                 }
                 if (db > maxDb - 10.0) {

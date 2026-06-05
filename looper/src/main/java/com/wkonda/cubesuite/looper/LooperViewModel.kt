@@ -24,8 +24,6 @@ data class LooperUiState(
     val isAnalyzing: Boolean = false,
     val startSample: Int = 0,
     val endSample: Int = 0,
-    val onsets: List<Int> = emptyList(),
-    val beatGrid: List<Int> = emptyList(),
     val signature: Pair<Int, Int> = 4 to 4,
     val bars: Int = 4,
     val chromagram: List<List<Double>> = emptyList(),
@@ -51,13 +49,15 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
     init {
         viewModelScope.launch {
             engine.recordingData.collect { d ->
-                if (d == null) return@collect
-                _uiState.update { it.copy(recordingData = d) }
-                if (_uiState.value.isRecording) _uiState.update {
+                if (d != null) _uiState.update {
                     it.copy(
-                        startSample = 0,
-                        endSample = d.size
-                    )
+                        recordingData = d
+                    ).let { s ->
+                        if (s.isRecording) s.copy(
+                            startSample = 0,
+                            endSample = d.size
+                        ) else s
+                    }
                 }
             }
         }
@@ -84,15 +84,12 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                     isRecording = true,
                     chromagram = emptyList(),
                     showChromagram = false,
-                    onsets = emptyList(),
-                    beatGrid = emptyList(),
                     correlationCurve = emptyList(),
                     rhythmicCurve = emptyList(),
                     activeLoop = null,
                     liveBpm = 0.0
                 )
-            }
-            engine.startRecording()
+            }; engine.startRecording()
         }
     }
 
@@ -123,66 +120,32 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
         val d = _uiState.value.recordingData ?: return@launch
         _uiState.update { it.copy(isAnalyzing = true) }
         withContext(Dispatchers.Default) {
-            val r = analyzer.analyze(d, _uiState.value.startSample, _uiState.value.bars)
+            val r = analyzer.analyze(d, _uiState.value.startSample, _uiState.value.totalBeats)
             _uiState.update {
                 it.copy(
                     startSample = r.startSample,
                     endSample = r.endSample,
-                    onsets = r.onsets,
-                    beatGrid = r.beatGrid,
                     chromagram = analyzer.getChromagram(d),
                     correlationCurve = r.correlationCurve,
                     rhythmicCurve = r.rhythmicCurve,
                     isAnalyzing = false
                 )
             }
-            updateGrid()
         }
     }
 
-    private fun updateGrid() {
-        val s = _uiState.value
-        if ((s.endSample - s.startSample) <= 0) return
-        val grid =
-            List(s.totalBeats) { i -> s.startSample + (i * (s.endSample - s.startSample).toDouble() / s.totalBeats).toInt() }
-        _uiState.update { it.copy(beatGrid = grid) }
-    }
-
-    fun updateStart(s: Int) {
-        _uiState.update { it.copy(startSample = s) }; updateGrid()
-    }
-
-    fun updateEnd(e: Int) {
-        _uiState.update { it.copy(endSample = e) }; updateGrid()
-    }
-
-    fun showSave() {
-        _uiState.update { it.copy(showSaveDialog = true) }
-    }
-
-    fun hideSave() {
-        _uiState.update { it.copy(showSaveDialog = false) }
-    }
-
-    fun updateLoopName(n: String) {
-        _uiState.update { it.copy(loopName = n) }
-    }
-
-    fun toggleView() {
-        _uiState.update { it.copy(showChromagram = !it.showChromagram) }
-    }
-
-    fun setUserSignature(num: Int, den: Int) {
-        _uiState.update { it.copy(signature = num to den) }; updateGrid()
-    }
-
-    fun setUserBars(bars: Int) {
-        _uiState.update { it.copy(bars = bars) }; updateGrid()
-    }
+    fun updateStart(s: Int) = _uiState.update { it.copy(startSample = s) }
+    fun updateEnd(e: Int) = _uiState.update { it.copy(endSample = e) }
+    fun showSave() = _uiState.update { it.copy(showSaveDialog = true) }
+    fun hideSave() = _uiState.update { it.copy(showSaveDialog = false) }
+    fun updateLoopName(n: String) = _uiState.update { it.copy(loopName = n) }
+    fun toggleView() = _uiState.update { it.copy(showChromagram = !it.showChromagram) }
+    fun setUserSignature(num: Int, den: Int) = _uiState.update { it.copy(signature = num to den) }
+    fun setUserBars(bars: Int) = _uiState.update { it.copy(bars = bars) }
 
     fun saveOrUpdate() = viewModelScope.launch {
         val s = _uiState.value;
-        val d = s.recordingData ?: return@launch;
+        val d = s.recordingData ?: return@launch
         val sigString = "${s.signature.first}/${s.signature.second}"
         if (s.activeLoop != null) {
             val updated = s.activeLoop.copy(
@@ -216,7 +179,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
 
     fun loadLoop(m: LoopMetadata) = viewModelScope.launch {
         engine.stopPlayback();
-        val d = repository.loadLoopData(m);
+        val d = repository.loadLoopData(m)
         val sig = m.timeSignature.split("/").let { it[0].toInt() to it[1].toInt() }
         _uiState.update {
             it.copy(
@@ -229,13 +192,11 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                 activeLoop = m,
                 loopName = m.name,
                 chromagram = emptyList(),
-                onsets = emptyList(),
-                beatGrid = emptyList(),
                 correlationCurve = emptyList(),
                 rhythmicCurve = emptyList()
             )
         }
-        engine.loadData(d, m.startSample, m.endSample); updateGrid()
+        engine.loadData(d, m.startSample, m.endSample)
     }
 
     fun deleteLoop(m: LoopMetadata) =

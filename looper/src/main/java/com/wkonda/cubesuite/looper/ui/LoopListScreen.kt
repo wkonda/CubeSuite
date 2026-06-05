@@ -20,9 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wkonda.cubesuite.looper.audio.LooperConfig
 import com.wkonda.cubesuite.looper.data.LoopMetadata
-import com.wkonda.cubesuite.ui.theme.AppDarkBackground
-import com.wkonda.cubesuite.ui.theme.ModTrackRed
-import com.wkonda.cubesuite.ui.theme.TextGrayBox
+import com.wkonda.cubesuite.ui.theme.DarkBackground
+import com.wkonda.cubesuite.ui.theme.SurfaceGray
+import com.wkonda.cubesuite.ui.theme.TrackRed
 import java.util.Locale
 
 @Composable
@@ -34,7 +34,7 @@ fun LoopListScreen(
     LazyColumn(
         Modifier
             .fillMaxSize()
-            .background(AppDarkBackground)
+            .background(DarkBackground)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -42,7 +42,7 @@ fun LoopListScreen(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .background(TextGrayBox)
+                    .background(SurfaceGray)
                     .clickable { onSelect(loop) }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -60,15 +60,13 @@ fun LoopListScreen(
                             Locale.US,
                             "%.2fS",
                             loop.totalSamples.toDouble() / LooperConfig.SAMPLE_RATE
-                        ),
-                        color = Color.Gray,
-                        style = MaterialTheme.typography.labelSmall
+                        ), color = Color.Gray, style = MaterialTheme.typography.labelSmall
                     )
                 }
                 Text(
                     "DELETE",
                     Modifier.clickable { onDelete(loop) },
-                    color = ModTrackRed,
+                    color = TrackRed,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
                 )

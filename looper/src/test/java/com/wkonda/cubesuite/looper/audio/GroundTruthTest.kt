@@ -18,9 +18,10 @@ class GroundTruthTest {
         val bytes = pcmFile.readBytes();
         val shortData = ShortArray(bytes.size / 2)
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shortData)
-        val analyzer = AudioAnalyzer(48000);
+        val analyzer = AudioAnalyzer(LooperConfig.SAMPLE_RATE);
         val result = analyzer.analyze(shortData, 0, 4)
-        val bpm = (16.0 * 60.0 * 48000.0) / (result.endSample - result.startSample)
+        val bpm =
+            (16.0 * 60.0 * LooperConfig.SAMPLE_RATE.toDouble()) / (result.endSample - result.startSample)
         assertTrue(abs(bpm - 80.0) < 0.02)
     }
 
@@ -31,8 +32,8 @@ class GroundTruthTest {
         val bytes = pcmFile.readBytes();
         val shortData = ShortArray(bytes.size / 2)
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shortData)
-        val analyzer = AudioAnalyzer(48000);
-        val result = analyzer.analyze(shortData, 210000, 8)
+        val analyzer = AudioAnalyzer(LooperConfig.SAMPLE_RATE);
+        val result = analyzer.analyze(shortData, 210000, 32)
         assertTrue(abs(result.bpm - 124.0) < 0.1)
     }
 
@@ -43,8 +44,8 @@ class GroundTruthTest {
         val bytes = pcmFile.readBytes();
         val shortData = ShortArray(bytes.size / 2)
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shortData)
-        val analyzer = AudioAnalyzer(48000);
-        val result = analyzer.analyze(shortData, 210000, 4)
+        val analyzer = AudioAnalyzer(LooperConfig.SAMPLE_RATE);
+        val result = analyzer.analyze(shortData, 400000, 16)
         assertTrue(abs(result.bpm - 144.0) < 0.5)
     }
 }

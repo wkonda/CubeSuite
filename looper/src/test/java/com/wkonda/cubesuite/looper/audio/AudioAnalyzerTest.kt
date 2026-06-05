@@ -9,7 +9,7 @@ class AudioAnalyzerTest {
 
     @Test
     fun testLoopingSearch() {
-        val sampleRate = 48000
+        val sampleRate = LooperConfig.SAMPLE_RATE
         val dataSize = sampleRate * 30
         val data = ShortArray(dataSize)
 
@@ -32,7 +32,7 @@ class AudioAnalyzerTest {
         fill(sampleRate * 20, dataSize, f2)
 
         val analyzer = AudioAnalyzer(sampleRate)
-        val result = analyzer.analyze(data, 4 * sampleRate, 4)
+        val result = analyzer.analyze(data, 4 * sampleRate, 16)
         
         assertTrue(
             "End should be near 12s, got ${result.endSample / sampleRate.toDouble()}s",
@@ -41,5 +41,14 @@ class AudioAnalyzerTest {
 
         val duration = (result.endSample - result.startSample).toDouble() / sampleRate
         assertTrue("Duration should be near 8s, got ${duration}s", abs(duration - 8.0) < 0.2)
+    }
+
+    @Test
+    fun testShortRecordingNoCrash() {
+        val sampleRate = LooperConfig.SAMPLE_RATE
+        val data = ShortArray(sampleRate / 10) // 100ms
+        val analyzer = AudioAnalyzer(sampleRate)
+        val result = analyzer.analyze(data, 0, 16)
+        assertTrue("Should not crash and return a result", result.endSample > 0)
     }
 }
