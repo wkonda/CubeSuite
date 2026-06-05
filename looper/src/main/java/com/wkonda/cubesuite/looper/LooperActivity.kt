@@ -54,7 +54,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.wkonda.cubesuite.looper.audio.LooperConfig
 import com.wkonda.cubesuite.looper.audio.LooperEngine
 import com.wkonda.cubesuite.looper.data.LoopRepository
-import com.wkonda.cubesuite.looper.ui.FFTVisualizer
+import com.wkonda.cubesuite.looper.ui.ChromaVisualizer
 import com.wkonda.cubesuite.looper.ui.LoopListScreen
 import com.wkonda.cubesuite.looper.ui.WaveformView
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
@@ -73,12 +73,10 @@ class LooperActivity : ComponentActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
-
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
         setContent {
             CubeSuiteTheme {
@@ -97,12 +95,10 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
     var barsMenuExpanded by remember { mutableStateOf(value = false) }
     val sigs = listOf(4 to 4, 3 to 4, 6 to 8, 2 to 4, 5 to 4)
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(AppDarkBackground)
-            .padding(8.dp)
-    ) {
+    Column(Modifier
+        .fillMaxSize()
+        .background(AppDarkBackground)
+        .padding(8.dp)) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("CUBE LOOPER", color = CyanAccent, fontWeight = FontWeight.Bold)
@@ -184,7 +180,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
                     Text(
-                        if (s.showSpectrogram) "WAVE" else "SPECTRO",
+                        if (s.showChromagram) "WAVE" else "CHROMA",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -209,8 +205,8 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 .border(1.dp, TextGrayBox, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
         ) {
-            if (s.showSpectrogram) FFTVisualizer(
-                s.spectrogram,
+            if (s.showChromagram) ChromaVisualizer(
+                s.chromagram,
                 s.recordingData?.size ?: 0,
                 s.startSample,
                 s.endSample,
@@ -220,7 +216,6 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 s.playbackPosition,
                 s.isPlaying,
                 s.beatGrid,
-                s.chords,
                 s.correlationCurve,
                 s.rhythmicCurve
             )
@@ -234,7 +229,6 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
                 s.isPlaying,
                 s.isRecording,
                 s.beatGrid,
-                s.chords,
                 s.correlationCurve,
                 s.rhythmicCurve
             )
@@ -290,9 +284,7 @@ fun LooperScreen(s: LooperUiState, vm: LooperViewModel) {
             Button(
                 onClick = { vm.saveOrUpdate() },
                 colors = ButtonDefaults.buttonColors(contentColor = Color.White)
-            ) {
-                Text("Save")
-            }
+            ) { Text("Save") }
         },
         title = { Text("Save") },
         text = {
@@ -361,7 +353,7 @@ fun Adj(
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val step = (LooperConfig.SAMPLE_RATE * 0.002).toInt()
+    val step = (LooperConfig.SAMPLE_RATE * 0.002).toInt();
     val seconds = value.toDouble() / LooperConfig.SAMPLE_RATE
     Surface(
         modifier = modifier.height(40.dp),

@@ -3,7 +3,6 @@ package com.wkonda.cubesuite.looper
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wkonda.cubesuite.looper.audio.AudioAnalyzer
-import com.wkonda.cubesuite.looper.audio.ChordRegion
 import com.wkonda.cubesuite.looper.audio.LooperConfig
 import com.wkonda.cubesuite.looper.audio.LooperEngine
 import com.wkonda.cubesuite.looper.data.LoopMetadata
@@ -27,11 +26,10 @@ data class LooperUiState(
     val endSample: Int = 0,
     val onsets: List<Int> = emptyList(),
     val beatGrid: List<Int> = emptyList(),
-    val chords: List<ChordRegion> = emptyList(),
     val signature: Pair<Int, Int> = 4 to 4,
     val bars: Int = 4,
-    val spectrogram: List<List<Double>> = emptyList(),
-    val showSpectrogram: Boolean = false,
+    val chromagram: List<List<Double>> = emptyList(),
+    val showChromagram: Boolean = false,
     val activeLoop: LoopMetadata? = null,
     val loops: List<LoopMetadata> = emptyList(),
     val showSaveDialog: Boolean = false,
@@ -41,12 +39,7 @@ data class LooperUiState(
     val rhythmicCurve: List<Pair<Int, Double>> = emptyList(),
 ) {
     val totalBeats: Int get() = bars * signature.first
-    val bpm: Double?
-        get() {
-            if (isRecording) return liveBpm
-            if (recordingData == null || (endSample - startSample) <= 0) return null
-            return (totalBeats.toDouble() * 60.0 * LooperConfig.SAMPLE_RATE) / (endSample - startSample)
-        }
+    val bpm: Double? get() = if (isRecording) liveBpm else if (recordingData == null || (endSample - startSample) <= 0) null else (totalBeats.toDouble() * 60.0 * LooperConfig.SAMPLE_RATE) / (endSample - startSample)
 }
 
 class LooperViewModel(private val engine: LooperEngine, private val repository: LoopRepository) :
@@ -69,7 +62,13 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
             }
         }
         viewModelScope.launch {
-            engine.playbackPosition.collect { p -> _uiState.update { it.copy(playbackPosition = p) } }
+            engine.playbackPosition.collect { p ->
+                _uiState.update {
+                    it.copy(
+                        playbackPosition = p
+                    )
+                }
+            }
         }
         loadLoops()
     }
@@ -83,11 +82,10 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
             _uiState.update {
                 it.copy(
                     isRecording = true,
-                    spectrogram = emptyList(),
-                    showSpectrogram = false,
+                    chromagram = emptyList(),
+                    showChromagram = false,
                     onsets = emptyList(),
                     beatGrid = emptyList(),
-                    chords = emptyList(),
                     correlationCurve = emptyList(),
                     rhythmicCurve = emptyList(),
                     activeLoop = null,
@@ -109,8 +107,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
             engine.stopPlayback(); engine.setLoopPoints(
                 _uiState.value.startSample,
                 _uiState.value.endSample
-            )
-            engine.startPlayback(); _uiState.update { it.copy(isPlaying = true) }; updatePlaybackProgress()
+            ); engine.startPlayback(); _uiState.update { it.copy(isPlaying = true) }; updatePlaybackProgress()
         }
     }
 
@@ -133,8 +130,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                     endSample = r.endSample,
                     onsets = r.onsets,
                     beatGrid = r.beatGrid,
-                    chords = r.chords,
-                    spectrogram = analyzer.getSpectrogram(d),
+                    chromagram = analyzer.getChromagram(d),
                     correlationCurve = r.correlationCurve,
                     rhythmicCurve = r.rhythmicCurve,
                     isAnalyzing = false
@@ -173,7 +169,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
     }
 
     fun toggleView() {
-        _uiState.update { it.copy(showSpectrogram = !it.showSpectrogram) }
+        _uiState.update { it.copy(showChromagram = !it.showChromagram) }
     }
 
     fun setUserSignature(num: Int, den: Int) {
@@ -185,8 +181,8 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
     }
 
     fun saveOrUpdate() = viewModelScope.launch {
-        val s = _uiState.value
-        val d = s.recordingData ?: return@launch
+        val s = _uiState.value;
+        val d = s.recordingData ?: return@launch;
         val sigString = "${s.signature.first}/${s.signature.second}"
         if (s.activeLoop != null) {
             val updated = s.activeLoop.copy(
@@ -220,7 +216,7 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
 
     fun loadLoop(m: LoopMetadata) = viewModelScope.launch {
         engine.stopPlayback();
-        val d = repository.loadLoopData(m)
+        val d = repository.loadLoopData(m);
         val sig = m.timeSignature.split("/").let { it[0].toInt() to it[1].toInt() }
         _uiState.update {
             it.copy(
@@ -232,10 +228,9 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
                 signature = sig,
                 activeLoop = m,
                 loopName = m.name,
-                spectrogram = emptyList(),
+                chromagram = emptyList(),
                 onsets = emptyList(),
                 beatGrid = emptyList(),
-                chords = emptyList(),
                 correlationCurve = emptyList(),
                 rhythmicCurve = emptyList()
             )

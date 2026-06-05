@@ -16,10 +16,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
@@ -27,63 +31,79 @@ import androidx.compose.ui.unit.dp
 import com.wkonda.cubesuite.ui.theme.AppDarkBackground
 import com.wkonda.cubesuite.ui.theme.CyanAccent
 import kotlin.math.abs
-import kotlin.math.max
 
 @Composable
-fun WaveformView(
-    data: ShortArray?,
+fun ChromaVisualizer(
+    chromagram: List<List<Double>>,
+    total: Int,
     start: Int,
     end: Int,
     onStart: (Int) -> Unit,
     onEnd: (Int) -> Unit,
+    modifier: Modifier = Modifier,
     pos: Int = 0,
     playing: Boolean = false,
-    recording: Boolean = false,
     beatGrid: List<Int> = emptyList(),
     correlationCurve: List<Pair<Int, Double>> = emptyList(),
     rhythmicCurve: List<Pair<Int, Double>> = emptyList(),
 ) {
-    if (data == null) return
     var size by remember { mutableStateOf(value = IntSize.Zero) }
     var handle by remember { mutableIntStateOf(-1) }
     val curS by rememberUpdatedState(newValue = start);
     val curE by rememberUpdatedState(newValue = end)
-    val windowSize = 5 * 48000;
-    val isWindowed = recording && data.size > windowSize
-    val dataOffset = if (isWindowed) data.size - windowSize else 0;
-    val displaySize = if (isWindowed) windowSize else data.size
+    val notes = remember { listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B") }
 
-    Box(Modifier
-        .fillMaxSize()
+    Box(modifier
         .background(AppDarkBackground)
         .onSizeChanged { size = it }
         .drawWithCache {
             val (w, h) = this.size
-            if (w <= 0 || h <= 0) onDrawBehind {} else {
+            if (chromagram.isEmpty() || w <= 0 || h <= 0) onDrawBehind {} else {
                 val bitmap = ImageBitmap(w.toInt(), h.toInt())
                 CanvasDrawScope().draw(this, layoutDirection, Canvas(bitmap), this.size) {
-                    val midY = h / 2;
-                    val step = max(1, displaySize / w.toInt())
-                    for (i in 0 until w.toInt()) {
-                        val idx = dataOffset + i * step; if (idx >= data.size) break
-                        val lh = (data[idx].toFloat() / Short.MAX_VALUE) * midY * 0.8f
-                        drawLine(
-                            CyanAccent.copy(0.4f),
-                            Offset(i.toFloat(), midY - lh),
-                            Offset(i.toFloat(), midY + lh)
-                        )
+                    val ch = h / chromagram[0].size;
+                    val cw = w / chromagram.size.toFloat()
+                    chromagram.forEachIndexed { t, mags ->
+                        mags.forEachIndexed { f, intensity ->
+                            if (intensity > 0.05f) {
+                                val color = when {
+                                    intensity < 0.3f -> lerp(
+                                        AppDarkBackground,
+                                        CyanAccent.copy(alpha = 0.4f),
+                                        intensity.toFloat() / 0.3f
+                                    )
+
+                                    intensity < 0.7f -> lerp(
+                                        CyanAccent.copy(alpha = 0.4f),
+                                        CyanAccent,
+                                        (intensity.toFloat() - 0.3f) / 0.4f
+                                    )
+
+                                    else -> lerp(
+                                        CyanAccent,
+                                        Color.White,
+                                        (intensity.toFloat() - 0.7f) / 0.3f
+                                    )
+                                }
+                                drawRect(
+                                    color,
+                                    Offset(t * cw, h - (f + 1) * ch),
+                                    Size(cw + 1f, ch + 1f)
+                                )
+                            }
+                        }
                     }
                 }
                 onDrawBehind { drawImage(bitmap) }
             }
         }
-        .pointerInput(data.size, playing, recording) {
-            if (playing || recording) return@pointerInput
+        .pointerInput(total, playing) {
+            if (total <= 0 || playing) return@pointerInput
             awaitEachGesture {
                 val down = awaitFirstDown();
                 val w = size.width.toFloat(); if (w <= 0) return@awaitEachGesture
-                val sX = curS.toFloat() * w / data.size;
-                val eX = curE.toFloat() * w / data.size
+                val sX = curS.toFloat() * w / total;
+                val eX = curE.toFloat() * w / total
                 handle = when {
                     abs(down.position.x - sX) < 48.dp.toPx() -> 0; abs(down.position.x - eX) < 48.dp.toPx() -> 1; else -> -1
                 }
@@ -92,13 +112,13 @@ fun WaveformView(
                         val ev = awaitPointerEvent();
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
-                        val n = (ch.position.x * data.size / w).toInt()
+                        val n = (ch.position.x * total / w).toInt()
                         if (handle == 0) onStart(
                             n.coerceIn(
                                 0,
                                 curE - 100
                             )
-                        ) else onEnd(n.coerceIn(curS + 100, data.size))
+                        ) else onEnd(n.coerceIn(curS + 100, total))
                         ch.consume()
                     }
                     handle = -1
@@ -107,9 +127,9 @@ fun WaveformView(
         }) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.toFloat();
-            val h = size.height.toFloat(); if (w <= 0 || h <= 0 || recording) return@Canvas
-            val sX = curS.toDouble() * w / data.size;
-            val eX = curE.toDouble() * w / data.size
+            val h = size.height.toFloat(); if (w <= 0 || h <= 0) return@Canvas
+            val sX = curS.toDouble() * w / total;
+            val eX = curE.toDouble() * w / total
             val darkRed = Color(0xFF8B0000);
             val stroke = 2.5.dp.toPx();
             val halfS = stroke / 2f
@@ -128,7 +148,7 @@ fun WaveformView(
                 stroke
             )
             if (playing) {
-                val cX = (curS + pos) * w / data.size; if (cX in 0f..w) drawLine(
+                val cX = (curS + pos) * w / total; if (cX in 0f..w) drawLine(
                     Color.White,
                     Offset(cX, 0f),
                     Offset(cX, h),
@@ -136,7 +156,7 @@ fun WaveformView(
                 )
             }
             beatGrid.forEach { b ->
-                val bX = b * w / data.size; if (bX in 0f..w) drawLine(
+                val bX = b * w / total; if (bX in 0f..w) drawLine(
                 darkRed.copy(0.6f),
                 Offset(bX, 0f),
                 Offset(bX, h),
@@ -146,7 +166,7 @@ fun WaveformView(
             if (rhythmicCurve.isNotEmpty()) {
                 val path = androidx.compose.ui.graphics.Path()
                 rhythmicCurve.forEachIndexed { i, p ->
-                    val x = p.first.toFloat() * w / data.size;
+                    val x = p.first.toFloat() * w / total;
                     val y = h - (p.second.toFloat() * h * 0.4f)
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
@@ -163,10 +183,11 @@ fun WaveformView(
                 val range = (maxSim - minSim).coerceAtLeast(0.01f);
                 var lastX = -1f
                 correlationCurve.forEach { p ->
-                    val x = p.first.toFloat() * w / data.size;
-                    val normY = (p.second.toFloat() - minSim) / range;
+                    val x = p.first.toFloat() * w / total;
+                    val sim = p.second.toFloat();
+                    val normY = (sim - minSim) / range;
                     val y = (h * 0.1f) + (1f - normY) * (h * 0.5f)
-                    if (lastX == -1f || abs(x - lastX) > (2048f * w / data.size)) path.moveTo(
+                    if (lastX == -1f || abs(x - lastX) > (2048f * w / total)) path.moveTo(
                         x,
                         y
                     ) else path.lineTo(x, y); lastX = x
@@ -174,11 +195,28 @@ fun WaveformView(
                 drawPath(
                     path,
                     Color.Yellow,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 1f,
-                        pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(radius = 4.dp.toPx())
-                    )
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
                 )
+            }
+            drawIntoCanvas { c ->
+                val p = android.graphics.Paint().apply {
+                    color = android.graphics.Color.argb(200, 255, 255, 255); textSize =
+                    28f; textAlign = android.graphics.Paint.Align.LEFT; isFakeBoldText = true
+                }
+                val ch = h / 12f
+                for (i in 0..12) {
+                    val lineY = h - (i * ch)
+                    drawLine(
+                        Color.White.copy(0.15f),
+                        Offset(0f, lineY),
+                        Offset(w, lineY),
+                        if (i == 0 || i == 12) 1.dp.toPx() else 0.5.dp.toPx()
+                    )
+                }
+                notes.forEachIndexed { i, name ->
+                    val yCenter = h - (i + 0.5f) * ch
+                    if (!name.contains("#")) c.nativeCanvas.drawText(name, 8f, yCenter + 10f, p)
+                }
             }
         }
     }

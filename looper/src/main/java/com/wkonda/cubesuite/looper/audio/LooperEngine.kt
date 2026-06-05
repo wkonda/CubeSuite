@@ -34,7 +34,9 @@ class LooperEngine {
     suspend fun startRecording() = withContext(Dispatchers.IO) {
         rec = AudioRecord(MediaRecorder.AudioSource.MIC, sR, AudioFormat.CHANNEL_IN_MONO, enc, bS)
         val maxSamples = LooperConfig.MAX_RECORD_SAMPLES
-        val list = java.util.ArrayDeque<Short>(maxSamples)
+        val recordingBuffer = ShortArray(maxSamples)
+        var writeIndex = 0
+        var bufferFull = false
         val buf = ShortArray(bS)
         rec?.startRecording(); isR = true
         var lastUpdate = 0L
@@ -42,18 +44,40 @@ class LooperEngine {
             val r = rec?.read(buf, 0, bS) ?: 0
             if (r > 0) {
                 for (i in 0 until r) {
-                    if (list.size >= maxSamples) list.removeFirst()
-                    list.addLast((buf[i].toInt() shl 1).toShort())
+                    recordingBuffer[writeIndex] = buf[i]
+                    writeIndex++
+                    if (writeIndex >= maxSamples) {
+                        writeIndex = 0
+                        bufferFull = true
+                    }
                 }
                 val now = System.currentTimeMillis()
                 if ((now - lastUpdate) > 100) {
-                    _data.value = list.toShortArray()
+                    _data.value = getSnapshot(recordingBuffer, writeIndex, bufferFull, maxSamples)
                     lastUpdate = now
                 }
             }
         }
         rec?.stop(); rec?.release(); rec = null
-        curD = list.toShortArray(); sS = 0; eS = curD?.size ?: 0; _data.value = curD
+        curD = getSnapshot(recordingBuffer, writeIndex, bufferFull, maxSamples)
+        sS = 0; eS = curD?.size ?: 0; _data.value = curD
+    }
+
+    private fun getSnapshot(
+        buffer: ShortArray,
+        writeIndex: Int,
+        full: Boolean,
+        max: Int
+    ): ShortArray {
+        val size = if (full) max else writeIndex
+        val result = ShortArray(size)
+        if (!full) {
+            System.arraycopy(buffer, 0, result, 0, writeIndex)
+        } else {
+            System.arraycopy(buffer, writeIndex, result, 0, max - writeIndex)
+            System.arraycopy(buffer, 0, result, max - writeIndex, writeIndex)
+        }
+        return result
     }
 
     fun stopRecording() {

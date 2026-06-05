@@ -4,7 +4,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 object AudioUtils {
     fun fft(complexData: DoubleArray) {
@@ -77,34 +76,6 @@ object AudioUtils {
         return candidates.sortedByDescending { it.second }.take(40).map { it.first }.sorted()
     }
 
-    fun calculateComplexNovelty(data: ShortArray, winSize: Int, stepSize: Int): List<Double> {
-        val numFrames = (data.size - winSize) / stepSize; if (numFrames <= 2) return emptyList()
-        val prevMag = DoubleArray(winSize / 2);
-        val prevPhase = DoubleArray(winSize / 2);
-        val prevPrevPhase = DoubleArray(winSize / 2);
-        val novelty = mutableListOf<Double>()
-        for (f in 0 until numFrames) {
-            val buf = DoubleArray(winSize * 2); for (j in 0 until winSize) {
-                buf[j * 2] =
-                    (data[f * stepSize + j].toDouble() / Short.MAX_VALUE) * (0.5 * (1 - cos(2 * PI * j / (winSize - 1))))
-            }
-            fft(buf);
-            var frameNovelty = 0.0
-            for (k in 0 until winSize / 2) {
-                val re = buf[k * 2];
-                val im = buf[k * 2 + 1];
-                val mag = sqrt(re * re + im * im);
-                val phase = kotlin.math.atan2(im, re)
-                val targetPhase = 2 * prevPhase[k] - prevPrevPhase[k];
-                val targetRe = prevMag[k] * cos(targetPhase);
-                val targetIm = prevMag[k] * sin(targetPhase)
-                frameNovelty += sqrt((targetRe - re) * (targetRe - re) + (targetIm - im) * (targetIm - im))
-                prevPrevPhase[k] = prevPhase[k]; prevPhase[k] = phase; prevMag[k] = mag
-            }
-            novelty.add(frameNovelty)
-        }
-        return novelty
-    }
 
     fun findBestRhythmicSnap(data: ShortArray, targetIdx: Int, onsets: List<Int>): Int {
         val neighborhood = LooperConfig.SAMPLE_RATE / 10

@@ -14,10 +14,7 @@ class RealWorldLoopTest {
     @Test
     fun testManifestLoops() {
         val manifestFile = File(resourcesDir, "manifest.json")
-        if (!manifestFile.exists()) {
-            println("Skipping RealWorldLoopTest: manifest.json not found at ${manifestFile.absolutePath}")
-            return
-        }
+        if (!manifestFile.exists()) return
 
         val manifestContent = manifestFile.readText()
         val entries = manifestContent.trim()
@@ -37,29 +34,16 @@ class RealWorldLoopTest {
                 }
 
             val fileName = fields["file"] ?: return@forEach
-            val expectedStart = fields["start"]?.toInt() ?: 0
-            val expectedEnd = fields["end"]?.toInt() ?: 0
             val pcmFile = File(resourcesDir, fileName)
 
-            if (!pcmFile.exists()) {
-                println("  PCM file $fileName missing, skipping...")
-                return@forEach
-            }
+            if (!pcmFile.exists()) return@forEach
 
             val bytes = pcmFile.readBytes()
             val shortData = ShortArray(bytes.size / 2)
             ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shortData)
 
-            println("--- Testing loop: ${fields["name"]} ($fileName) ---")
-
             val result = analyzer.analyze(shortData, 0, 4)
 
-            println("  Manual S: $expectedStart, AI S: ${result.startSample} (Diff: ${result.startSample - expectedStart})")
-            println("  Manual E: $expectedEnd, AI E: ${result.endSample} (Diff: ${result.endSample - expectedEnd})")
-            println("  Detected Chords: ${result.chords.map { it.label }.distinct()}")
-
-            // We don't assert failure here because the AI points might be musically better 
-            // than the user's manual points in the manifest. This test is for visual validation.
             assertTrue(
                 "AI should have found a valid end point after start",
                 result.endSample > result.startSample
