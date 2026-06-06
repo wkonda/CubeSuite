@@ -197,6 +197,12 @@ class LooperViewModel(private val engine: LooperEngine, private val repository: 
             )
         }
         engine.loadData(d, m.startSample, m.endSample)
+
+        // Background chromagram generation
+        viewModelScope.launch(Dispatchers.Default) {
+            val chroma = analyzer.getChromagram(d)
+            _uiState.update { it.copy(chromagram = chroma) }
+        }
     }
 
     fun deleteLoop(m: LoopMetadata) =

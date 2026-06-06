@@ -1,10 +1,20 @@
 <resources>
     <string name="app_name">Looper</string>
-    <string name="record">Record</string>
+    <string name="cube_looper">CUBE LOOPER</string>
+    <string name="library">LIBRARY</string>
     <string name="stop">Stop</string>
     <string name="play">Play</string>
-    <string name="pause">Pause</string>
-    <string name="save">Save</string>
-    <string name="loop_name">Loop Name</string>
+    <string name="analyze">ANALYZE</string>
+    <string name="save">SAVE</string>
+    <string name="update">UPDATE</string>
+    <string name="start">START</string>
+    <string name="end">END</string>
+    <string name="wave">WAVE</string>
+    <string name="chroma">CHROMA</string>
+    <string name="bar">bar</string>
+    <string name="bars">bars</string>
+    <string name="save_loop">Save Loop</string>
     <string name="delete">Delete</string>
+    <string name="bpm">BPM</string>
+    <string name="seconds_short">s</string>
 </resources>
