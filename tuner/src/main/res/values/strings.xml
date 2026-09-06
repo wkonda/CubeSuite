@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Guitar Tuner</string>
+    <string name="permission_title">Microphone permission required</string>
+    <string name="permission_body">This app needs microphone access to analyze pitch in real time.</string>
+    <string name="permission_button">Grant microphone access</string>
+</resources>

@@ -4,13 +4,12 @@
     <uses-feature android:name="android.hardware.usb.host" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
+        android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.CubeSuite">
+        android:theme="@style/Theme.CubeSuite"
+        tools:ignore="DataExtractionRules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

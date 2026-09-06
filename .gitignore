@@ -4,3 +4,6 @@
 /captures
 
 local.properties
+
+/tuner/build
+/tuner/.cxx
